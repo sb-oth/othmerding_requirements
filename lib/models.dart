@@ -50,10 +50,12 @@ class RequirementFolder {
     required this.name,
     required this.description,
     this.parentId,
-    this.requirementIds = const [],
-    this.commentIds = const [],
-    this.childFolderIds = const [],
-  });
+    List<int> requirementIds = const [],
+    List<int> commentIds = const [],
+    List<int> childFolderIds = const [],
+  }) : requirementIds = List<int>.of(requirementIds),
+       commentIds = List<int>.of(commentIds),
+       childFolderIds = List<int>.of(childFolderIds);
 
   final int id;
   String name;
@@ -277,6 +279,23 @@ class RequirementProject {
             )
             .toList(),
       );
+
+  static RequirementProject empty({required String name}) => RequirementProject(
+    name: name,
+    nextRequirementNumber: 1,
+    nextEntityId: 102,
+    folders: [RequirementFolder(id: 1, name: 'Project root', description: '')],
+    requirements: [],
+    comments: [],
+    variants: [
+      RequirementVariant(
+        id: 101,
+        parentId: 0,
+        name: 'All systems',
+        description: 'Requirements shared by all systems.',
+      ),
+    ],
+  );
 
   static RequirementProject sample() => RequirementProject(
     name: 'Vehicle Control System',

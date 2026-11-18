@@ -5,6 +5,28 @@ import 'package:oth_requirements/models.dart';
 
 void main() {
   group('RequirementProject', () {
+    test('creates an empty project with required root items', () {
+      final project = RequirementProject.empty(name: 'Safety program');
+
+      expect(project.name, 'Safety program');
+      expect(project.requirements, isEmpty);
+      expect(project.folders.single.parentId, isNull);
+      expect(project.variants.single.parentId, 0);
+      expect(project.nextRequirementNumber, 1);
+    });
+
+    test('adds content to an empty project root', () {
+      final project = RequirementProject.empty(name: 'New project');
+
+      final requirement = project.createRequirement(1);
+      final folder = project.createFolder(1);
+      final comment = project.createComment(1, requirement.id);
+
+      expect(project.folder(1).requirementIds, [requirement.id]);
+      expect(project.folder(1).childFolderIds, [folder.id]);
+      expect(project.folder(1).commentIds, [comment.id]);
+    });
+
     test('round trips the complete JSON database', () {
       final project = RequirementProject.sample();
 

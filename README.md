@@ -5,6 +5,7 @@ comments, relationships, and hierarchical variants.
 
 ## Features
 
+- Create a project in a location selected with the Windows Save dialog
 - VS Code-style explorer with folders, requirements, and comments
 - Search by ID, variant (`version:`), or free text
 - Orthogonal relationship graph with incoming and outgoing `specifies` links

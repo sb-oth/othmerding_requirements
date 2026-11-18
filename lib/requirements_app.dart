@@ -1,4 +1,9 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:window_manager/window_manager.dart';
 
 import 'models.dart';
 import 'project_repository.dart';
@@ -32,7 +37,7 @@ class _Workspace extends StatefulWidget {
 }
 
 class _WorkspaceState extends State<_Workspace> {
-  final ProjectRepository _repository = ProjectRepository();
+  ProjectRepository _repository = ProjectRepository();
   final TextEditingController _searchController = TextEditingController();
   RequirementProject? _project;
   Object? _loadError;
@@ -158,6 +163,167 @@ class _WorkspaceState extends State<_Workspace> {
     }
   }
 
+  Future<bool> _confirmDiscardChanges(String action) async {
+    if (!_hasChanges) return true;
+    final proceed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Unsaved changes'),
+        content: Text('$action will discard the current unsaved changes.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Continue'),
+          ),
+        ],
+      ),
+    );
+    return proceed == true;
+  }
+
+  Future<void> _openProject() async {
+    if (!await _confirmDiscardChanges('Opening another project')) return;
+    final result = await FilePicker.pickFile(
+      dialogTitle: 'Open requirements project',
+      type: FileType.custom,
+      allowedExtensions: const ['json'],
+    );
+    final path = result?.path;
+    if (path == null) return;
+    try {
+      final repository = ProjectRepository(path: path);
+      final project = await repository.load();
+      if (!mounted) return;
+      setState(() {
+        _repository = repository;
+        _setCurrentProject(project);
+      });
+      _showMessage('Opened ${project.name}');
+    } catch (error) {
+      _showMessage('Could not open project: $error', isError: true);
+    }
+  }
+
+  Future<void> _saveProjectAs() async {
+    final outputUri = await FilePicker.saveFile(
+      dialogTitle: 'Save project as',
+      fileName: '${_safeFileName(_data.name)}.json',
+      bytes: Uint8List.fromList(utf8.encode(_data.toPrettyJson())),
+      mimeType: 'application/json',
+    );
+    if (outputUri == null) return;
+    setState(
+      () => _repository = ProjectRepository(
+        path: outputUri.toFilePath(windows: true),
+      ),
+    );
+    await _saveProject();
+  }
+
+  void _setCurrentProject(RequirementProject project) {
+    _project = project;
+    _selectedFolderId = project.folders.first.id;
+    _selectedRequirementId = null;
+    _selectedCommentId = null;
+    _highlightedRequirementId = null;
+    _variantsVisible = false;
+    _search = '';
+    _searchController.clear();
+    _expandedFolders
+      ..clear()
+      ..add(project.folders.first.id);
+    _dirtyRequirements.clear();
+    _dirtyComments.clear();
+    _requirementBaselines
+      ..clear()
+      ..addEntries(
+        project.requirements.map(
+          (requirement) => MapEntry(requirement.id, requirement.copy()),
+        ),
+      );
+    _projectDirty = false;
+    _loadError = null;
+    _loadEditor();
+  }
+
+  Future<void> _createProject() async {
+    if (!await _confirmDiscardChanges('Creating a new project')) return;
+
+    final name = await _promptForProjectName();
+    if (name == null) return;
+
+    try {
+      final project = RequirementProject.empty(name: name);
+      final outputUri = await FilePicker.saveFile(
+        dialogTitle: 'Save new requirements project',
+        fileName: '${_safeFileName(name)}.json',
+        bytes: Uint8List.fromList(utf8.encode(project.toPrettyJson())),
+        mimeType: 'application/json',
+      );
+      if (outputUri == null) return;
+      final outputPath = outputUri.toFilePath(windows: true);
+      final repository = ProjectRepository(path: outputPath);
+      if (!mounted) return;
+      setState(() {
+        _repository = repository;
+        _setCurrentProject(project);
+      });
+      _showMessage('Created $name');
+    } catch (error) {
+      _showMessage('Could not create project: $error', isError: true);
+    }
+  }
+
+  Future<String?> _promptForProjectName() async {
+    var name = 'New requirements project';
+    final controller = TextEditingController(text: name)
+      ..selection = TextSelection.collapsed(offset: name.length);
+    final route = DialogRoute<String>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Create project'),
+          content: TextField(
+            autofocus: true,
+            decoration: const InputDecoration(labelText: 'Project name'),
+            controller: controller,
+            onChanged: (value) => setDialogState(() => name = value),
+            onSubmitted: (value) {
+              if (value.trim().isNotEmpty) {
+                Navigator.pop(context, value.trim());
+              }
+            },
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: name.trim().isEmpty
+                  ? null
+                  : () => Navigator.pop(context, name.trim()),
+              child: const Text('Choose location'),
+            ),
+          ],
+        ),
+      ),
+    );
+    final result = await Navigator.of(context).push(route);
+    await route.completed;
+    controller.dispose();
+    return result;
+  }
+
+  String _safeFileName(String name) => name
+      .replaceAll(RegExp(r'[<>:"/\\|?*]'), '_')
+      .trim()
+      .replaceAll(RegExp(r'\.+$'), '');
+
   void _showMessage(String message, {bool isError = false}) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -243,6 +409,54 @@ class _WorkspaceState extends State<_Workspace> {
     });
   }
 
+  Future<void> _renameFolder(int folderId) async {
+    final folder = _data.folder(folderId);
+    final controller = TextEditingController(text: folder.name)
+      ..selection = TextSelection(
+        baseOffset: 0,
+        extentOffset: folder.name.length,
+      );
+    final route = DialogRoute<String>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Rename folder'),
+          content: TextField(
+            autofocus: true,
+            controller: controller,
+            decoration: const InputDecoration(labelText: 'Folder name'),
+            onChanged: (_) => setDialogState(() {}),
+            onSubmitted: (value) {
+              if (value.trim().isNotEmpty) {
+                Navigator.pop(context, value.trim());
+              }
+            },
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: controller.text.trim().isEmpty
+                  ? null
+                  : () => Navigator.pop(context, controller.text.trim()),
+              child: const Text('Rename'),
+            ),
+          ],
+        ),
+      ),
+    );
+    final name = await Navigator.of(context).push(route);
+    await route.completed;
+    controller.dispose();
+    if (name == null || name == folder.name) return;
+    setState(() {
+      folder.name = name;
+      _projectDirty = true;
+    });
+  }
+
   void _addComment() {
     if (_selectedFolderId == null || _selectedRequirementId == null) return;
     final comment = _data.createComment(
@@ -325,7 +539,7 @@ class _WorkspaceState extends State<_Workspace> {
     return Scaffold(
       body: Column(
         children: [
-          _buildTopBar(context),
+          _buildTitleBar(context),
           Expanded(
             child: Row(
               children: [
@@ -364,57 +578,102 @@ class _WorkspaceState extends State<_Workspace> {
     );
   }
 
-  Widget _buildTopBar(BuildContext context) {
-    return Material(
-      color: Theme.of(context).colorScheme.surface,
-      elevation: 1,
-      child: SizedBox(
-        height: 52,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14),
-          child: Row(
-            children: [
-              Icon(Icons.hub, color: Theme.of(context).colorScheme.primary),
-              const SizedBox(width: 10),
-              const Text(
-                'OTH Requirements',
-                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(width: 22),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 6,
+  Widget _buildTitleBar(BuildContext context) {
+    final title = '${_data.name} — ${_repository.path}';
+    return GestureDetector(
+      onPanStart: (_) => windowManager.startDragging(),
+      behavior: HitTestBehavior.translucent,
+      child: Container(
+        height: 34,
+        color: const Color(0xFFF3F3F3),
+        child: Row(
+          children: [
+            MenuAnchor(
+              menuChildren: [
+                MenuItemButton(
+                  leadingIcon: const Icon(Icons.folder_open_outlined),
+                  onPressed: _openProject,
+                  child: const Text('Open Project'),
                 ),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(6),
+                MenuItemButton(
+                  leadingIcon: const Icon(Icons.create_new_folder_outlined),
+                  onPressed: _createProject,
+                  child: const Text('Create Project'),
                 ),
-                child: Text(_data.name),
-              ),
-              const Spacer(),
-              TextButton.icon(
-                onPressed: () =>
-                    setState(() => _variantsVisible = !_variantsVisible),
-                icon: Icon(
-                  _variantsVisible ? Icons.account_tree : Icons.layers_outlined,
+                MenuItemButton(
+                  leadingIcon: const Icon(Icons.save_outlined),
+                  onPressed: _saving ? null : _saveProject,
+                  child: const Text('Save Project'),
                 ),
-                label: Text(_variantsVisible ? 'Graph' : 'Variants'),
+                MenuItemButton(
+                  leadingIcon: const Icon(Icons.save_as_outlined),
+                  onPressed: _saveProjectAs,
+                  child: const Text('Save Project as'),
+                ),
+              ],
+              builder: (context, controller, child) => TextButton(
+                onPressed: controller.isOpen
+                    ? controller.close
+                    : controller.open,
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                ),
+                child: const Text('File'),
               ),
-              const SizedBox(width: 8),
-              FilledButton.icon(
-                onPressed: _hasChanges && !_saving ? _saveProject : null,
-                icon: _saving
-                    ? const SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.save_outlined),
-                label: const Text('Save project'),
+            ),
+            MenuAnchor(
+              menuChildren: [
+                MenuItemButton(
+                  leadingIcon: const Icon(Icons.layers_outlined),
+                  onPressed: () => setState(() => _variantsVisible = true),
+                  child: const Text('Open Variant Editor'),
+                ),
+              ],
+              builder: (context, controller, child) => TextButton(
+                onPressed: controller.isOpen
+                    ? controller.close
+                    : controller.open,
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                ),
+                child: const Text('Variant'),
               ),
-            ],
-          ),
+            ),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
+            ),
+            _WindowControl(
+              icon: Icons.remove,
+              tooltip: 'Minimize',
+              onPressed: windowManager.minimize,
+            ),
+            _WindowControl(
+              icon: Icons.crop_square,
+              tooltip: 'Maximize',
+              onPressed: () async {
+                if (await windowManager.isMaximized()) {
+                  await windowManager.unmaximize();
+                } else {
+                  await windowManager.maximize();
+                }
+              },
+            ),
+            _WindowControl(
+              icon: Icons.close,
+              tooltip: 'Close',
+              destructive: true,
+              onPressed: windowManager.close,
+            ),
+          ],
         ),
       ),
     );
@@ -525,6 +784,13 @@ class _WorkspaceState extends State<_Workspace> {
           icon: expanded ? Icons.folder_open : Icons.folder_outlined,
           label: folder.name,
           onTap: () => _selectFolder(folderId),
+          onDoubleTap: () => _renameFolder(folderId),
+          trailingAction: IconButton(
+            tooltip: 'Rename folder',
+            icon: const Icon(Icons.edit_outlined, size: 16),
+            visualDensity: VisualDensity.compact,
+            onPressed: () => _renameFolder(folderId),
+          ),
           leadingAction: IconButton(
             tooltip: expanded ? 'Collapse folder' : 'Expand folder',
             icon: Icon(
@@ -864,28 +1130,92 @@ class _WorkspaceState extends State<_Workspace> {
   }
 
   Future<void> _showAddRelation(Requirement source) async {
-    final selected = await showDialog<int>(
+    final controller = TextEditingController();
+    var query = '';
+    final route = DialogRoute<int>(
       context: context,
-      builder: (context) => SimpleDialog(
-        title: const Text('Add specifies relation'),
-        children: _data.requirements
-            .where(
-              (item) =>
-                  item.id != source.id && !source.outgoingIds.contains(item.id),
-            )
-            .map(
-              (item) => SimpleDialogOption(
-                onPressed: () => Navigator.pop(context, item.id),
-                child: ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(item.displayId),
-                  subtitle: Text(item.title),
-                ),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final available = _data.requirements
+              .where(
+                (item) =>
+                    item.id != source.id &&
+                    !source.outgoingIds.contains(item.id),
+              )
+              .where((item) {
+                final search = query.trim().toLowerCase();
+                return '${item.displayId} ${item.title}'.toLowerCase().contains(
+                  search,
+                );
+              })
+              .toList();
+          return AlertDialog(
+            title: const Text('Add specifies relation'),
+            content: SizedBox(
+              width: 480,
+              height: 420,
+              child: Column(
+                children: [
+                  TextField(
+                    controller: controller,
+                    autofocus: true,
+                    onChanged: (value) => setDialogState(() => query = value),
+                    decoration: InputDecoration(
+                      hintText: 'Search by ID or title',
+                      prefixIcon: const Icon(Icons.search),
+                      suffixIcon: query.isEmpty
+                          ? null
+                          : IconButton(
+                              tooltip: 'Clear search',
+                              onPressed: () {
+                                controller.clear();
+                                setDialogState(() => query = '');
+                              },
+                              icon: const Icon(Icons.close),
+                            ),
+                      border: const OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Expanded(
+                    child: available.isEmpty
+                        ? const Center(child: Text('No requirements found'))
+                        : ListView.separated(
+                            itemCount: available.length,
+                            separatorBuilder: (_, _) =>
+                                const Divider(height: 1),
+                            itemBuilder: (context, index) {
+                              final item = available[index];
+                              return ListTile(
+                                onTap: () => Navigator.pop(context, item.id),
+                                leading: const Icon(Icons.description_outlined),
+                                title: Text(item.displayId),
+                                subtitle: Text(
+                                  item.title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                trailing: const Icon(Icons.add),
+                              );
+                            },
+                          ),
+                  ),
+                ],
               ),
-            )
-            .toList(),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+            ],
+          );
+        },
       ),
     );
+    final selected = await Navigator.of(context).push(route);
+    await route.completed;
+    controller.dispose();
     if (selected == null) return;
     setState(() => source.outgoingIds.add(selected));
     _markRequirementDirty();
@@ -962,6 +1292,12 @@ class _WorkspaceState extends State<_Workspace> {
         children: [
           Row(
             children: [
+              OutlinedButton.icon(
+                onPressed: () => setState(() => _variantsVisible = false),
+                icon: const Icon(Icons.account_tree_outlined),
+                label: const Text('Back to graph'),
+              ),
+              const SizedBox(width: 14),
               const Expanded(
                 child: Text(
                   'Variants',
@@ -1122,6 +1458,8 @@ class _ExplorerRow extends StatelessWidget {
     this.highlighted = false,
     this.dirty = false,
     this.leadingAction,
+    this.trailingAction,
+    this.onDoubleTap,
   });
 
   final int depth;
@@ -1132,6 +1470,8 @@ class _ExplorerRow extends StatelessWidget {
   final bool highlighted;
   final bool dirty;
   final Widget? leadingAction;
+  final Widget? trailingAction;
+  final VoidCallback? onDoubleTap;
 
   @override
   Widget build(BuildContext context) {
@@ -1144,6 +1484,7 @@ class _ExplorerRow extends StatelessWidget {
           : Colors.transparent,
       child: InkWell(
         onTap: onTap,
+        onDoubleTap: onDoubleTap,
         child: SizedBox(
           height: 29,
           child: Padding(
@@ -1168,6 +1509,8 @@ class _ExplorerRow extends StatelessWidget {
                   ),
                 ),
                 if (dirty) Icon(Icons.circle, size: 7, color: scheme.primary),
+                if (trailingAction != null)
+                  SizedBox(width: 26, child: trailingAction),
               ],
             ),
           ),
@@ -1291,5 +1634,45 @@ class _IconButton extends StatelessWidget {
     icon: Icon(icon, size: 19),
     onPressed: onPressed,
     visualDensity: VisualDensity.compact,
+  );
+}
+
+class _WindowControl extends StatelessWidget {
+  const _WindowControl({
+    required this.icon,
+    required this.tooltip,
+    required this.onPressed,
+    this.destructive = false,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onPressed;
+  final bool destructive;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: 46,
+    height: 34,
+    child: IconButton(
+      tooltip: tooltip,
+      icon: Icon(icon, size: 14),
+      onPressed: onPressed,
+      style: ButtonStyle(
+        overlayColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.hovered)
+              ? (destructive ? const Color(0xFFC42B1C) : Colors.black12)
+              : null,
+        ),
+        foregroundColor: WidgetStateProperty.resolveWith(
+          (states) => destructive && states.contains(WidgetState.hovered)
+              ? Colors.white
+              : Colors.black87,
+        ),
+        shape: const WidgetStatePropertyAll(
+          RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+        ),
+      ),
+    ),
   );
 }

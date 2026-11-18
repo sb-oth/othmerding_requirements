@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "name": "BatterySystemsV2",
+  "nextRequirementNumber": 1,
+  "nextEntityId": 102,
+  "folders": [
+    {
+      "id": 1,
+      "name": "Project root",
+      "description": "",
+      "parent": null,
+      "contents": {
+        "requirements": [],
+        "comments": [],
+        "folders": []
+      }
+    }
+  ],
+  "requirements": [],
+  "comments": [],
+  "variants": [
+    {
+      "id": 101,
+      "parent": 0,
+      "name": "All systems",
+      "description": "Requirements shared by all systems."
+    }
+  ]
+}
