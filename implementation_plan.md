@@ -1,5 +1,24 @@
 # Othmerding Requirement
 
+This is the Design Doc for a simple Requirement Management program.
+The System shall handle the following Data:
+- Folders
+- Requirements
+- Comments
+- Variants
+
+# Folders
+Contain Requirements, Comments and other Folders.
+
+# Requirements
+Always marked with "REQ-" in the application ID shall be Automatically assigned on creation. The ID shall be an ongoing number.
+One a number has been used in the project, it shall never be used again, even if the Requirement is deleted.
+Requirements have a Title, a Description and a rationale.
+
+Requirement can relate to other Requirements. Currently, specifies is the only relation.
+
+# Comments
+Can relate to a requirement and is used to add extra context.
 
 # Variants
 Variants offers a mechanism to describe different but similar System in the same Project to avoid duplication.
@@ -13,6 +32,7 @@ A Variant cannot be deleted, as long as a Requirement still has the Variant sele
 Purely a Display. 
 Displays the selected Requirement or all Requirement within a Folder but not the subfolders of the folder.
 If a Requirement is selected, construct a graph with all other Requirements this one points too or is pointed by.
+Place the selected Requirement in the middle.
 Only display related Requirement with a direct connection.
 Show the connections as connecting arrows.
 Clicking a Requirement shall Open it in the Requirement Editor and Highlight in the Graph.
@@ -28,14 +48,17 @@ Folder shall be Expandable.
 Shall be structured like the Explorer of VSCode.
 With Requirements being equivalent to Files.
 
-## Adding a Subfolder/Requirement
+## Adding a Subfolder/Requirement/Comment
 Above the root folder shall be a button to Add a Requirement and one to add a Folder.
 The added Element shall be added to the currently selected folder.
 If no folder is selected, the Add buttons shall be deactivated.
 
 # Variant
-The Variant tree shall be accessable through a button on the Top Bar.
+The Variant tree shall be accessible through a button on the Top Bar.
 The Variant Viewer shall be a table with Splitting columns for every sub Variant.
+
+Variant shall be created or edited in a popup window.
+
 
 # Search
 The search Bar shall be above the Explorer.
@@ -69,7 +92,12 @@ Clicking the focus button shall select a Requirement in the Explorer.
 It shall have the same effect as clicking it in the Explorer.
 The Graph shall be rebuild around this requirement.
 
-The Third column shall contain the Reference Search.
+
+# Comment Editor
+Simmelar to the Requirement Editor, but only with Outgoing connections 
+and only description. 
+
+
 
 # Unsaved Changes
 Every unsaved change shall be Marked with a dot.
@@ -78,11 +106,7 @@ But also in the Explorer and the Tree view.
 
 
 # Implementation
-
-Create the Graph Layout using Graphviz
 Create a schema that uses the examples in the example_jsons folders.
 Use one large Json File as Project Database.
-Use Python 3.14.
-Use Flet.
-Unit test all non UI Code.
-Use Icons from the flet package.
+Use Flutter to implement a native application.
+Unit test your code.
