@@ -1,0 +1,24 @@
+{
+    "id": 172,
+    "title": "Example Requirement",
+    "description": "This is an example requirement.",
+    "rationale": "This requirement is necessary for the example.",
+    "source": "file link, url, or something else",
+    "variant": 183,
+    "relations": [
+        {
+            "type": "specifies",
+            "target": 156
+        }
+    ],
+    "references": [
+        {
+            "type": "cited",
+            "source":"file link, url, or something else"
+        },
+        {
+            "type": "test",
+            "source": 456
+        }
+    ]
+}

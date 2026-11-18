@@ -1,0 +1,17 @@
+{
+    "id": 123,
+    "name": "Graph",
+    "element_positions": [
+        {
+            "requirement": 172,
+            "x": 25,
+            "y": 80
+        },
+        {
+            "test": 183,
+            "x": 140,
+            "y": 200
+        }
+    ],
+    "contents": []
+}

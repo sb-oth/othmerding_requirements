@@ -1,0 +1,10 @@
+{
+    "id": 172,
+    "attaches_too": [
+        {
+            "type": "requirement",
+            "id": 172
+        }
+    ],
+    "comment": "This is an example comment."
+}
