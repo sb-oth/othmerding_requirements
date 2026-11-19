@@ -38,7 +38,81 @@ void main() {
       expect(restored.folders.length, project.folders.length);
       expect(restored.comments.length, project.comments.length);
       expect(restored.variants.length, project.variants.length);
-      expect(restored.requirements.first.outgoingIds, [129, 130]);
+      expect(
+        restored.requirements.first.relations.map(
+          (relation) => relation.targetId,
+        ),
+        [129, 130],
+      );
+      expect(
+        restored.requirements.first.relations.map((relation) => relation.type),
+        [RequirementRelationType.derived, RequirementRelationType.derived],
+      );
+    });
+
+    test('supports relationship types and migrates legacy specifies links', () {
+      final requirement = Requirement.fromJson({
+        'id': 1,
+        'title': 'Source',
+        'description': '',
+        'rationale': '',
+        'variant': 101,
+        'relations': [
+          {'type': 'specifies', 'target': 2},
+          {'type': 'related', 'target': 3},
+          {'type': 'contained', 'target': 4},
+        ],
+      });
+
+      expect(requirement.relations.map((relation) => relation.type), [
+        RequirementRelationType.derived,
+        RequirementRelationType.related,
+        RequirementRelationType.contained,
+      ]);
+      expect(requirement.toJson()['relations'], [
+        {'type': 'derived', 'target': 2},
+        {'type': 'related', 'target': 3},
+        {'type': 'contained', 'target': 4},
+      ]);
+    });
+
+    test('migrates legacy comment attachments to Related relationships', () {
+      final comment = RequirementComment.fromJson({
+        'id': 12,
+        'comment': 'Legacy review note',
+        'attaches_too': [
+          {'type': 'requirement', 'id': 4},
+        ],
+      });
+
+      expect(comment.title, 'Comment');
+      expect(comment.relatedRequirementIds, [4]);
+      expect(comment.toJson()['relations'], [
+        {'type': 'related', 'target': 4},
+      ]);
+    });
+
+    test('serializes titled comments with Related requirement links', () {
+      final project = RequirementProject.empty(name: 'Comment links');
+      final first = project.createRequirement(1);
+      final second = project.createRequirement(1);
+      final comment = project.createComment(1, first.id, title: 'Review note')
+        ..description = 'Check both affected requirements.'
+        ..relatedRequirementIds.add(second.id);
+      expect(comment.title, 'Review note');
+
+      final restored = RequirementProject.fromJson(
+        jsonDecode(project.toPrettyJson()) as Map<String, Object?>,
+      );
+      final restoredComment = restored.comments.single;
+
+      expect(restoredComment.title, 'Review note');
+      expect(restoredComment.description, 'Check both affected requirements.');
+      expect(restoredComment.relatedRequirementIds, [first.id, second.id]);
+      expect(restoredComment.toJson()['relations'], [
+        {'type': 'related', 'target': first.id},
+        {'type': 'related', 'target': second.id},
+      ]);
     });
 
     test('allocates monotonically increasing requirement IDs', () {

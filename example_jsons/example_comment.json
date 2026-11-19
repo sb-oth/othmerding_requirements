@@ -1,10 +1,11 @@
 {
     "id": 172,
-    "attaches_too": [
+    "title": "Example review note",
+    "comment": "This is an example comment.",
+    "relations": [
         {
-            "type": "requirement",
-            "id": 172
+            "type": "related",
+            "target": 172
         }
-    ],
-    "comment": "This is an example comment."
+    ]
 }

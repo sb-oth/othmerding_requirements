@@ -40,6 +40,43 @@ void main() {
     expect(restored.folders.length, project.folders.length);
   });
 
+  test(
+    'loads the complex example project with all relationship types',
+    () async {
+      final repository = ProjectRepository(
+        path:
+            'example_jsons${Platform.pathSeparator}complex_warehouse_robot.json',
+      );
+
+      final project = await repository.load();
+      final relationTypes = project.requirements
+          .expand((requirement) => requirement.relations)
+          .map((relation) => relation.type)
+          .toSet();
+
+      expect(project.requirements.length, greaterThanOrEqualTo(40));
+      expect(
+        project.folders.where((folder) => folder.parentId != null),
+        isNotEmpty,
+      );
+      expect(relationTypes, containsAll(RequirementRelationType.values));
+      expect(
+        project.requirements.every(
+          (requirement) => project.containingFolder(requirement.id) != null,
+        ),
+        isTrue,
+      );
+      for (final requirement in project.requirements) {
+        for (final relation in requirement.relations) {
+          expect(
+            project.requirements.any((item) => item.id == relation.targetId),
+            isTrue,
+          );
+        }
+      }
+    },
+  );
+
   test('saves only the selected requirement', () async {
     final directory = await Directory.systemTemp.createTemp(
       'oth_requirements_test_',
@@ -92,6 +129,46 @@ void main() {
     expect(restored.nextRequirementNumber, requirement.id + 1);
   });
 
+  test('saves only the selected comment', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'oth_requirements_test_',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+    final repository = ProjectRepository(
+      path: '${directory.path}${Platform.pathSeparator}project.json',
+    );
+    final project = RequirementProject.empty(name: 'Comment save');
+    final firstRequirement = project.createRequirement(1);
+    final secondRequirement = project.createRequirement(1);
+    final firstComment = project.createComment(1, firstRequirement.id);
+    final secondComment = project.createComment(1, secondRequirement.id);
+    await repository.save(project);
+
+    final unsavedProject = await repository.load();
+    unsavedProject.name = 'Unsaved project name';
+    final selectedComment = unsavedProject.comments.first;
+    selectedComment.title = 'Updated review title';
+    selectedComment.relatedRequirementIds.add(secondRequirement.id);
+    unsavedProject.comments.last.description = 'Unsaved other comment';
+
+    await repository.saveComment(
+      selectedComment,
+      folderId: 1,
+      nextEntityId: unsavedProject.nextEntityId,
+    );
+    final restored = await repository.load();
+
+    expect(restored.comments.first.title, 'Updated review title');
+    expect(restored.comments.first.relatedRequirementIds, [
+      firstRequirement.id,
+      secondRequirement.id,
+    ]);
+    expect(restored.comments.last.description, '');
+    expect(restored.name, 'Comment save');
+    expect(restored.comments.last.id, secondComment.id);
+    expect(restored.comments.first.id, firstComment.id);
+  });
+
   test(
     'prevents deleting requirements with incoming or outgoing relations',
     () async {
@@ -105,7 +182,12 @@ void main() {
       final project = RequirementProject.empty(name: 'Linked requirements');
       final source = project.createRequirement(1);
       final target = project.createRequirement(1);
-      source.outgoingIds.add(target.id);
+      source.relations.add(
+        RequirementRelation(
+          type: RequirementRelationType.derived,
+          targetId: target.id,
+        ),
+      );
       await repository.save(project);
 
       await expectLater(
@@ -119,7 +201,10 @@ void main() {
 
       final restored = await repository.load();
       expect(restored.requirements, hasLength(2));
-      expect(restored.requirement(source.id).outgoingIds, [target.id]);
+      expect(
+        restored.requirement(source.id).relations.single.targetId,
+        target.id,
+      );
     },
   );
 
@@ -142,7 +227,7 @@ void main() {
     expect(restored.folder(1).requirementIds, isEmpty);
   });
 
-  test('prevents deleting requirements that have attached comments', () async {
+  test('prevents deleting requirements related to comments', () async {
     final directory = await Directory.systemTemp.createTemp(
       'oth_requirements_test_',
     );
@@ -160,6 +245,26 @@ void main() {
       throwsA(isA<StateError>()),
     );
     expect((await repository.load()).requirements, hasLength(1));
+  });
+
+  test('deletes a comment and removes its folder entry', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'oth_requirements_test_',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+    final repository = ProjectRepository(
+      path: '${directory.path}${Platform.pathSeparator}project.json',
+    );
+    final project = RequirementProject.empty(name: 'Comment deletion');
+    final requirement = project.createRequirement(1);
+    final comment = project.createComment(1, requirement.id);
+    await repository.save(project);
+
+    await repository.deleteComment(comment.id);
+
+    final restored = await repository.load();
+    expect(restored.comments, isEmpty);
+    expect(restored.folder(1).commentIds, isEmpty);
   });
 
   test('remembers the last opened project path', () async {

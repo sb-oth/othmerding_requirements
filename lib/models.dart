@@ -1,5 +1,45 @@
 import 'dart:convert';
 
+enum RequirementRelationType {
+  derived('Derived'),
+  related('Related'),
+  contained('Contained');
+
+  const RequirementRelationType(this.label);
+
+  final String label;
+
+  static RequirementRelationType fromJson(Object? value) {
+    if (value is! String) {
+      throw const FormatException('A relationship type must be a string.');
+    }
+    return switch (value.toLowerCase()) {
+      'derived' || 'specifies' => RequirementRelationType.derived,
+      'related' => RequirementRelationType.related,
+      'contained' => RequirementRelationType.contained,
+      _ => throw FormatException('Unknown relationship type: $value'),
+    };
+  }
+}
+
+class RequirementRelation {
+  const RequirementRelation({required this.type, required this.targetId});
+
+  final RequirementRelationType type;
+  final int targetId;
+
+  RequirementRelation copy() =>
+      RequirementRelation(type: type, targetId: targetId);
+
+  Map<String, Object?> toJson() => {'type': type.name, 'target': targetId};
+
+  factory RequirementRelation.fromJson(Map<String, Object?> json) =>
+      RequirementRelation(
+        type: RequirementRelationType.fromJson(json['type']),
+        targetId: json['target'] as int,
+      );
+}
+
 class Requirement {
   Requirement({
     required this.id,
@@ -7,7 +47,7 @@ class Requirement {
     required this.description,
     required this.rationale,
     required this.variantId,
-    required this.outgoingIds,
+    required this.relations,
   });
 
   final int id;
@@ -15,7 +55,7 @@ class Requirement {
   String description;
   String rationale;
   int variantId;
-  List<int> outgoingIds;
+  List<RequirementRelation> relations;
 
   String get displayId => 'REQ-${id.toString().padLeft(3, '0')}';
 
@@ -27,9 +67,7 @@ class Requirement {
     'description': description,
     'rationale': rationale,
     'variant': variantId,
-    'relations': outgoingIds
-        .map((target) => {'type': 'specifies', 'target': target})
-        .toList(),
+    'relations': relations.map((relation) => relation.toJson()).toList(),
   };
 
   factory Requirement.fromJson(Map<String, Object?> json) => Requirement(
@@ -38,8 +76,11 @@ class Requirement {
     description: (json['description'] as String?) ?? '',
     rationale: (json['rationale'] as String?) ?? '',
     variantId: json['variant'] as int,
-    outgoingIds: ((json['relations'] as List<dynamic>?) ?? const [])
-        .map((entry) => (entry as Map<String, Object?>)['target'] as int)
+    relations: ((json['relations'] as List<dynamic>?) ?? const [])
+        .map(
+          (entry) =>
+              RequirementRelation.fromJson(entry as Map<String, Object?>),
+        )
         .toList(),
   );
 }
@@ -96,30 +137,56 @@ class RequirementFolder {
 class RequirementComment {
   RequirementComment({
     required this.id,
+    required this.title,
     required this.description,
-    required this.attachedToId,
-  });
+    required List<int> relatedRequirementIds,
+  }) : relatedRequirementIds = List<int>.of(relatedRequirementIds);
 
   final int id;
+  String title;
   String description;
-  int attachedToId;
+  List<int> relatedRequirementIds;
+
+  RequirementComment copy() => RequirementComment.fromJson(toJson());
 
   Map<String, Object?> toJson() => {
     'id': id,
+    'title': title,
     'comment': description,
-    'attaches_too': [
-      {'type': 'requirement', 'id': attachedToId},
-    ],
+    'relations': relatedRequirementIds
+        .map((id) => {'type': 'related', 'target': id})
+        .toList(),
   };
 
   factory RequirementComment.fromJson(Map<String, Object?> json) {
-    final attachments = json['attaches_too'] as List<dynamic>? ?? const [];
+    final List<int> relatedRequirementIds;
+    if (json.containsKey('relations')) {
+      final serializedRelations = json['relations'];
+      if (serializedRelations is! List<dynamic>) {
+        throw const FormatException(
+          'Comment relationships must be a JSON array.',
+        );
+      }
+      relatedRequirementIds = serializedRelations.map((entry) {
+        final relation = entry as Map<String, Object?>;
+        if ((relation['type'] as String?)?.toLowerCase() != 'related') {
+          throw const FormatException(
+            'Comment relationships must have type "related".',
+          );
+        }
+        return relation['target'] as int;
+      }).toList();
+    } else {
+      relatedRequirementIds =
+          ((json['attaches_too'] as List<dynamic>?) ?? const [])
+              .map((entry) => (entry as Map<String, Object?>)['id'] as int)
+              .toList();
+    }
     return RequirementComment(
       id: json['id'] as int,
+      title: (json['title'] as String?) ?? 'Comment',
       description: (json['comment'] as String?) ?? '',
-      attachedToId: attachments.isEmpty
-          ? 0
-          : (attachments.first as Map<String, Object?>)['id'] as int,
+      relatedRequirementIds: relatedRequirementIds,
     );
   }
 }
@@ -195,7 +262,7 @@ class RequirementProject {
       description: '',
       rationale: '',
       variantId: variants.first.id,
-      outgoingIds: [],
+      relations: [],
     );
     requirements.add(requirement);
     folder(folderId).requirementIds.add(requirement.id);
@@ -215,11 +282,16 @@ class RequirementProject {
     return child;
   }
 
-  RequirementComment createComment(int folderId, int requirementId) {
+  RequirementComment createComment(
+    int folderId,
+    int requirementId, {
+    String title = 'New comment',
+  }) {
     final comment = RequirementComment(
       id: nextEntityId++,
-      description: 'New comment',
-      attachedToId: requirementId,
+      title: title,
+      description: '',
+      relatedRequirementIds: [requirementId],
     );
     comments.add(comment);
     folder(folderId).commentIds.add(comment.id);
@@ -333,7 +405,16 @@ class RequirementProject {
         rationale:
             'Operators must be able to verify the state without external tooling.',
         variantId: 101,
-        outgoingIds: [129, 130],
+        relations: [
+          RequirementRelation(
+            type: RequirementRelationType.derived,
+            targetId: 129,
+          ),
+          RequirementRelation(
+            type: RequirementRelationType.derived,
+            targetId: 130,
+          ),
+        ],
       ),
       Requirement(
         id: 129,
@@ -343,7 +424,12 @@ class RequirementProject {
         rationale:
             'A predictable update interval supports closed-loop control.',
         variantId: 101,
-        outgoingIds: [131],
+        relations: [
+          RequirementRelation(
+            type: RequirementRelationType.derived,
+            targetId: 131,
+          ),
+        ],
       ),
       Requirement(
         id: 130,
@@ -352,7 +438,7 @@ class RequirementProject {
             'The system shall report a loss of communication within two seconds.',
         rationale: 'Connection faults must be visible to the operator.',
         variantId: 102,
-        outgoingIds: [],
+        relations: [],
       ),
       Requirement(
         id: 131,
@@ -361,15 +447,16 @@ class RequirementProject {
             'The system shall enter a safe state when critical telemetry is unavailable.',
         rationale: 'A safe fallback limits the impact of invalid vehicle data.',
         variantId: 103,
-        outgoingIds: [],
+        relations: [],
       ),
     ],
     comments: [
       RequirementComment(
         id: 900,
+        title: 'Telemetry interval review',
         description:
             'The telemetry interval was agreed during the architecture review.',
-        attachedToId: 129,
+        relatedRequirementIds: [129],
       ),
     ],
     variants: [

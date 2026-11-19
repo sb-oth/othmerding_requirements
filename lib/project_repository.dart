@@ -64,10 +64,46 @@ class ProjectRepository {
       );
     }
     final requirementIds = project.requirements.map((item) => item.id).toSet();
-    if (requirement.outgoingIds.any((id) => !requirementIds.contains(id))) {
+    if (requirement.relations.any(
+      (relation) => !requirementIds.contains(relation.targetId),
+    )) {
       throw StateError(
         'Save related requirements before saving this requirement.',
       );
+    }
+    await save(project);
+  }
+
+  Future<void> saveComment(
+    RequirementComment comment, {
+    int? folderId,
+    required int nextEntityId,
+  }) async {
+    final project = await load();
+    final commentIndex = project.comments.indexWhere(
+      (item) => item.id == comment.id,
+    );
+    if (commentIndex == -1) {
+      if (folderId == null ||
+          !project.folders.any((folder) => folder.id == folderId)) {
+        throw StateError(
+          'Save the containing folder before saving this comment.',
+        );
+      }
+      project.comments.add(comment.copy());
+      project.folder(folderId).commentIds.add(comment.id);
+      if (project.nextEntityId < nextEntityId) {
+        project.nextEntityId = nextEntityId;
+      }
+    } else {
+      project.comments[commentIndex] = comment.copy();
+    }
+
+    final requirementIds = project.requirements.map((item) => item.id).toSet();
+    if (comment.relatedRequirementIds.any(
+      (id) => !requirementIds.contains(id),
+    )) {
+      throw StateError('Save related requirements before saving this comment.');
     }
     await save(project);
   }
@@ -82,24 +118,25 @@ class ProjectRepository {
     }
 
     final requirement = project.requirements[requirementIndex];
-    if (requirement.outgoingIds.isNotEmpty) {
+    if (requirement.relations.isNotEmpty) {
       throw StateError(
         'Remove all outgoing relations before deleting this requirement.',
       );
     }
     if (project.requirements.any(
       (item) =>
-          item.id != requirementId && item.outgoingIds.contains(requirementId),
+          item.id != requirementId &&
+          item.relations.any((relation) => relation.targetId == requirementId),
     )) {
       throw StateError(
         'Remove all incoming relations before deleting this requirement.',
       );
     }
     if (project.comments.any(
-      (comment) => comment.attachedToId == requirementId,
+      (comment) => comment.relatedRequirementIds.contains(requirementId),
     )) {
       throw StateError(
-        'Remove comments attached to this requirement before deleting it.',
+        'Remove comments related to this requirement before deleting it.',
       );
     }
 
@@ -109,6 +146,26 @@ class ProjectRepository {
     }
     folder.requirementIds.remove(requirementId);
     project.requirements.removeAt(requirementIndex);
+    await save(project);
+  }
+
+  Future<void> deleteComment(int commentId) async {
+    final project = await load();
+    final commentIndex = project.comments.indexWhere(
+      (item) => item.id == commentId,
+    );
+    if (commentIndex == -1) {
+      throw StateError('Comment $commentId does not exist.');
+    }
+
+    final folder = project.folders.where(
+      (item) => item.commentIds.contains(commentId),
+    );
+    if (folder.isEmpty) {
+      throw StateError('Comment $commentId is not in a folder.');
+    }
+    folder.first.commentIds.remove(commentId);
+    project.comments.removeAt(commentIndex);
     await save(project);
   }
 }

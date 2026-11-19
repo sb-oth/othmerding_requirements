@@ -17,6 +17,16 @@ const _titleBarMenuItemStyle = ButtonStyle(
   textStyle: WidgetStatePropertyAll(TextStyle(fontSize: 10)),
 );
 
+class _RequirementRelationEntry {
+  const _RequirementRelationEntry({
+    required this.requirement,
+    required this.relation,
+  });
+
+  final Requirement requirement;
+  final RequirementRelation relation;
+}
+
 class RequirementsApp extends StatelessWidget {
   const RequirementsApp({super.key});
 
@@ -56,12 +66,14 @@ class _WorkspaceState extends State<_Workspace> {
   final Set<int> _dirtyRequirements = {};
   final Set<int> _newRequirements = {};
   final Set<int> _dirtyComments = {};
+  final Set<int> _newComments = {};
   final Map<int, Requirement> _requirementBaselines = {};
   bool _projectDirty = false;
 
   late TextEditingController _titleController;
   late TextEditingController _descriptionController;
   late TextEditingController _rationaleController;
+  late TextEditingController _commentTitleController;
   late TextEditingController _commentController;
 
   RequirementProject get _data => _project!;
@@ -70,7 +82,8 @@ class _WorkspaceState extends State<_Workspace> {
       _projectDirty ||
       _dirtyRequirements.isNotEmpty ||
       _newRequirements.isNotEmpty ||
-      _dirtyComments.isNotEmpty;
+      _dirtyComments.isNotEmpty ||
+      _newComments.isNotEmpty;
 
   @override
   void initState() {
@@ -78,6 +91,7 @@ class _WorkspaceState extends State<_Workspace> {
     _titleController = TextEditingController();
     _descriptionController = TextEditingController();
     _rationaleController = TextEditingController();
+    _commentTitleController = TextEditingController();
     _commentController = TextEditingController();
     _loadProject();
   }
@@ -88,6 +102,7 @@ class _WorkspaceState extends State<_Workspace> {
     _titleController.dispose();
     _descriptionController.dispose();
     _rationaleController.dispose();
+    _commentTitleController.dispose();
     _commentController.dispose();
     super.dispose();
   }
@@ -130,6 +145,7 @@ class _WorkspaceState extends State<_Workspace> {
     final comment = _selectedCommentId == null
         ? null
         : _data.comments.firstWhere((item) => item.id == _selectedCommentId);
+    _commentTitleController.text = comment?.title ?? '';
     _commentController.text = comment?.description ?? '';
   }
 
@@ -151,6 +167,7 @@ class _WorkspaceState extends State<_Workspace> {
         _dirtyRequirements.clear();
         _newRequirements.clear();
         _dirtyComments.clear();
+        _newComments.clear();
         _projectDirty = false;
         _requirementBaselines
           ..clear()
@@ -213,6 +230,50 @@ class _WorkspaceState extends State<_Workspace> {
       );
     } catch (error) {
       _showMessage('Could not save requirement: $error', isError: true);
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _saveComment() async {
+    final repository = _repository;
+    final id = _selectedCommentId;
+    if (_saving || repository == null || id == null) return;
+    final comment = _data.comments.where((item) => item.id == id).firstOrNull;
+    if (comment == null) return;
+
+    final folder = _data.folders
+        .where((item) => item.commentIds.contains(id))
+        .firstOrNull;
+    final savedComment = comment.copy();
+    setState(() => _saving = true);
+    try {
+      await repository.saveComment(
+        savedComment,
+        folderId: folder?.id,
+        nextEntityId: _data.nextEntityId,
+      );
+      final rememberError = await _rememberProjectPath(repository.path);
+      if (!mounted) return;
+      setState(() {
+        _newComments.remove(id);
+        final current = _data.comments
+            .where((item) => item.id == id)
+            .firstOrNull;
+        if (current != null &&
+            jsonEncode(current.toJson()) == jsonEncode(savedComment.toJson())) {
+          _dirtyComments.remove(id);
+        }
+      });
+      _showMessage(
+        rememberError == null
+            ? 'Comment saved'
+            : 'Comment saved, but could not remember its location: '
+                  '$rememberError',
+        isError: rememberError != null,
+      );
+    } catch (error) {
+      _showMessage('Could not save comment: $error', isError: true);
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -301,6 +362,7 @@ class _WorkspaceState extends State<_Workspace> {
     _dirtyRequirements.clear();
     _newRequirements.clear();
     _dirtyComments.clear();
+    _newComments.clear();
     _requirementBaselines
       ..clear()
       ..addEntries(
@@ -460,7 +522,7 @@ class _WorkspaceState extends State<_Workspace> {
       _selectedCommentId = id;
       _selectedRequirementId = null;
       _selectedFolderId = folder.id;
-      _highlightedRequirementId = comment.attachedToId;
+      _highlightedRequirementId = comment.relatedRequirementIds.firstOrNull;
       _loadEditor();
     });
   }
@@ -543,7 +605,7 @@ class _WorkspaceState extends State<_Workspace> {
       _selectedRequirementId!,
     );
     _dirtyComments.add(comment.id);
-    _projectDirty = true;
+    _newComments.add(comment.id);
     _selectComment(comment.id);
   }
 
@@ -564,7 +626,9 @@ class _WorkspaceState extends State<_Workspace> {
       current.description = baseline.description;
       current.rationale = baseline.rationale;
       current.variantId = baseline.variantId;
-      current.outgoingIds = List<int>.from(baseline.outgoingIds);
+      current.relations = baseline.relations
+          .map((relation) => relation.copy())
+          .toList();
     }
     _loadEditor();
     setState(() => _dirtyRequirements.remove(id));
@@ -573,19 +637,20 @@ class _WorkspaceState extends State<_Workspace> {
 
   String? _requirementDeletionBlockReason(int requirementId) {
     final requirement = _data.requirement(requirementId);
-    if (requirement.outgoingIds.isNotEmpty) {
+    if (requirement.relations.isNotEmpty) {
       return 'Remove outgoing relations before deleting this requirement.';
     }
     if (_data.requirements.any(
       (item) =>
-          item.id != requirementId && item.outgoingIds.contains(requirementId),
+          item.id != requirementId &&
+          item.relations.any((relation) => relation.targetId == requirementId),
     )) {
       return 'Remove incoming relations before deleting this requirement.';
     }
     if (_data.comments.any(
-      (comment) => comment.attachedToId == requirementId,
+      (comment) => comment.relatedRequirementIds.contains(requirementId),
     )) {
-      return 'Remove comments attached to this requirement before deleting it.';
+      return 'Remove comment relationships to this requirement before deleting it.';
     }
     return null;
   }
@@ -662,9 +727,13 @@ class _WorkspaceState extends State<_Workspace> {
       final selected = _data.requirement(_selectedRequirementId!);
       return <int>{
         selected.id,
-        ...selected.outgoingIds,
+        ...selected.relations.map((relation) => relation.targetId),
         ..._data.requirements
-            .where((item) => item.outgoingIds.contains(selected.id))
+            .where(
+              (item) => item.relations.any(
+                (relation) => relation.targetId == selected.id,
+              ),
+            )
             .map((item) => item.id),
       }.where((id) => _data.requirements.any((item) => item.id == id)).toList();
     }
@@ -672,12 +741,37 @@ class _WorkspaceState extends State<_Workspace> {
       final comment = _data.comments.firstWhere(
         (item) => item.id == _selectedCommentId,
       );
-      return [comment.attachedToId];
+      return List<int>.from(comment.relatedRequirementIds);
     }
     if (_selectedFolderId != null) {
-      return List<int>.from(_data.folder(_selectedFolderId!).requirementIds);
+      final folder = _data.folder(_selectedFolderId!);
+      return <int>{
+        ...folder.requirementIds,
+        ...folder.commentIds.expand(
+          (commentId) => _data.comments
+              .firstWhere((comment) => comment.id == commentId)
+              .relatedRequirementIds,
+        ),
+      }.toList();
     }
     return [];
+  }
+
+  List<int> get _graphCommentIds {
+    if (_selectedCommentId != null) return [_selectedCommentId!];
+
+    final visibleRequirementIds = _graphIds.toSet();
+    final visibleCommentIds = _data.comments
+        .where(
+          (comment) =>
+              comment.relatedRequirementIds.any(visibleRequirementIds.contains),
+        )
+        .map((comment) => comment.id)
+        .toSet();
+    if (_selectedFolderId != null) {
+      visibleCommentIds.addAll(_data.folder(_selectedFolderId!).commentIds);
+    }
+    return visibleCommentIds.toList();
   }
 
   @override
@@ -749,9 +843,12 @@ class _WorkspaceState extends State<_Workspace> {
                             : RequirementsGraph(
                                 project: _data,
                                 requirementIds: _graphIds,
+                                commentIds: _graphCommentIds,
                                 selectedId: _selectedRequirementId,
+                                selectedCommentId: _selectedCommentId,
                                 highlightedId: _highlightedRequirementId,
                                 onSelect: _selectFromGraph,
+                                onSelectComment: _selectComment,
                               ),
                       ),
                       const Divider(height: 1),
@@ -1039,8 +1136,7 @@ class _WorkspaceState extends State<_Workspace> {
               selected: _selectedCommentId == id,
               dirty: _dirtyComments.contains(id),
               icon: Icons.chat_bubble_outline,
-              label:
-                  'Comment  ${_data.comments.firstWhere((item) => item.id == id).description}',
+              label: _data.comments.firstWhere((item) => item.id == id).title,
               onTap: () => _selectComment(id),
             ),
       ],
@@ -1064,8 +1160,8 @@ class _WorkspaceState extends State<_Workspace> {
           .contains(query.substring(8).trim());
     }
     final commentText = _data.comments
-        .where((comment) => comment.attachedToId == id)
-        .map((comment) => comment.description)
+        .where((comment) => comment.relatedRequirementIds.contains(id))
+        .map((comment) => '${comment.title} ${comment.description}')
         .join(' ');
     return _matchesText(
       '${requirement.displayId} ${requirement.title} ${requirement.description} '
@@ -1076,7 +1172,8 @@ class _WorkspaceState extends State<_Workspace> {
   bool _matchesComment(int id) =>
       _search.isEmpty ||
       _matchesText(
-        _data.comments.firstWhere((comment) => comment.id == id).description,
+        '${_data.comments.firstWhere((comment) => comment.id == id).title} '
+        '${_data.comments.firstWhere((comment) => comment.id == id).description}',
       );
 
   bool _folderMatches(int folderId) {
@@ -1108,9 +1205,20 @@ class _WorkspaceState extends State<_Workspace> {
         ),
       );
     }
-    final incoming = _data.requirements
-        .where((item) => item.outgoingIds.contains(requirement.id))
+    final outgoing = requirement.relations
+        .map(
+          (relation) => _RequirementRelationEntry(
+            requirement: _data.requirement(relation.targetId),
+            relation: relation,
+          ),
+        )
         .toList();
+    final incoming = [
+      for (final source in _data.requirements)
+        for (final relation in source.relations)
+          if (relation.targetId == requirement.id)
+            _RequirementRelationEntry(requirement: source, relation: relation),
+    ];
     return ColoredBox(
       color: Theme.of(context).colorScheme.surface,
       child: Row(
@@ -1121,14 +1229,12 @@ class _WorkspaceState extends State<_Workspace> {
             flex: 3,
             child: _buildRelations(
               context,
-              title: 'Outgoing · specifies',
-              requirements: requirement.outgoingIds
-                  .map(_data.requirement)
-                  .toList(),
+              title: 'Outgoing',
+              relations: outgoing,
               editable: true,
               onAdd: () => _showAddRelation(requirement),
-              onRemove: (id) {
-                setState(() => requirement.outgoingIds.remove(id));
+              onRemove: (relation) {
+                setState(() => requirement.relations.remove(relation));
                 _markRequirementDirty();
               },
             ),
@@ -1139,7 +1245,7 @@ class _WorkspaceState extends State<_Workspace> {
             child: _buildRelations(
               context,
               title: 'Incoming',
-              requirements: incoming,
+              relations: incoming,
               editable: false,
             ),
           ),
@@ -1266,10 +1372,10 @@ class _WorkspaceState extends State<_Workspace> {
   Widget _buildRelations(
     BuildContext context, {
     required String title,
-    required List<Requirement> requirements,
+    required List<_RequirementRelationEntry> relations,
     required bool editable,
     VoidCallback? onAdd,
-    ValueChanged<int>? onRemove,
+    ValueChanged<RequirementRelation>? onRemove,
   }) {
     return Padding(
       padding: const EdgeInsets.all(7),
@@ -1291,30 +1397,32 @@ class _WorkspaceState extends State<_Workspace> {
           ),
           const Divider(height: 1),
           const SizedBox(height: 4),
-          if (requirements.isEmpty)
+          if (relations.isEmpty)
             const Padding(
               padding: EdgeInsets.only(top: 18),
               child: Text('No relations', textAlign: TextAlign.center),
             ),
           Expanded(
             child: ListView(
-              children: requirements
+              children: relations
                   .map(
-                    (item) => ListTile(
+                    (entry) => ListTile(
                       dense: true,
                       contentPadding: const EdgeInsets.only(left: 8),
-                      title: Text(item.displayId),
+                      title: Text(entry.requirement.displayId),
                       subtitle: Text(
-                        item.title,
+                        '${entry.relation.type.label} · '
+                        '${entry.requirement.title}',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      onTap: () => _selectRequirement(item.id, focus: true),
+                      onTap: () =>
+                          _selectRequirement(entry.requirement.id, focus: true),
                       trailing: editable
                           ? IconButton(
                               tooltip: 'Remove relation',
                               icon: const Icon(Icons.close, size: 16),
-                              onPressed: () => onRemove?.call(item.id),
+                              onPressed: () => onRemove?.call(entry.relation),
                             )
                           : null,
                     ),
@@ -1330,7 +1438,8 @@ class _WorkspaceState extends State<_Workspace> {
   Future<void> _showAddRelation(Requirement source) async {
     final controller = TextEditingController();
     var query = '';
-    final route = DialogRoute<int>(
+    var relationType = RequirementRelationType.derived;
+    final route = DialogRoute<RequirementRelation>(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) {
@@ -1338,7 +1447,9 @@ class _WorkspaceState extends State<_Workspace> {
               .where(
                 (item) =>
                     item.id != source.id &&
-                    !source.outgoingIds.contains(item.id),
+                    !source.relations.any(
+                      (relation) => relation.targetId == item.id,
+                    ),
               )
               .where((item) {
                 final search = query.trim().toLowerCase();
@@ -1348,12 +1459,32 @@ class _WorkspaceState extends State<_Workspace> {
               })
               .toList();
           return AlertDialog(
-            title: const Text('Add specifies relation'),
+            title: const Text('Add relationship'),
             content: SizedBox(
               width: 480,
               height: 420,
               child: Column(
                 children: [
+                  DropdownButtonFormField<RequirementRelationType>(
+                    initialValue: relationType,
+                    decoration: const InputDecoration(
+                      labelText: 'Relationship type',
+                    ),
+                    items: RequirementRelationType.values
+                        .map(
+                          (type) => DropdownMenuItem(
+                            value: type,
+                            child: Text(type.label),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) {
+                      if (value != null) {
+                        setDialogState(() => relationType = value);
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 8),
                   TextField(
                     controller: controller,
                     autofocus: true,
@@ -1385,7 +1516,13 @@ class _WorkspaceState extends State<_Workspace> {
                             itemBuilder: (context, index) {
                               final item = available[index];
                               return ListTile(
-                                onTap: () => Navigator.pop(context, item.id),
+                                onTap: () => Navigator.pop(
+                                  context,
+                                  RequirementRelation(
+                                    type: relationType,
+                                    targetId: item.id,
+                                  ),
+                                ),
                                 leading: const Icon(Icons.description_outlined),
                                 title: Text(item.displayId),
                                 subtitle: Text(
@@ -1415,8 +1552,137 @@ class _WorkspaceState extends State<_Workspace> {
     await route.completed;
     controller.dispose();
     if (selected == null) return;
-    setState(() => source.outgoingIds.add(selected));
+    setState(() => source.relations.add(selected));
     _markRequirementDirty();
+  }
+
+  Future<void> _showAddCommentRelation(RequirementComment comment) async {
+    final controller = TextEditingController();
+    var query = '';
+    final route = DialogRoute<int>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final available = _data.requirements
+              .where(
+                (requirement) =>
+                    !comment.relatedRequirementIds.contains(requirement.id),
+              )
+              .where((requirement) {
+                final search = query.trim().toLowerCase();
+                return '${requirement.displayId} ${requirement.title}'
+                    .toLowerCase()
+                    .contains(search);
+              })
+              .toList();
+          return AlertDialog(
+            title: const Text('Relate comment to requirement'),
+            content: SizedBox(
+              width: 480,
+              height: 420,
+              child: Column(
+                children: [
+                  TextField(
+                    controller: controller,
+                    autofocus: true,
+                    onChanged: (value) => setDialogState(() => query = value),
+                    decoration: const InputDecoration(
+                      hintText: 'Search by ID or title',
+                      prefixIcon: Icon(Icons.search),
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Expanded(
+                    child: available.isEmpty
+                        ? const Center(child: Text('No requirements found'))
+                        : ListView.separated(
+                            itemCount: available.length,
+                            separatorBuilder: (_, _) =>
+                                const Divider(height: 1),
+                            itemBuilder: (context, index) {
+                              final requirement = available[index];
+                              return ListTile(
+                                onTap: () =>
+                                    Navigator.pop(context, requirement.id),
+                                leading: const Icon(Icons.description_outlined),
+                                title: Text(requirement.displayId),
+                                subtitle: Text(
+                                  requirement.title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                trailing: const Icon(Icons.add),
+                              );
+                            },
+                          ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    final requirementId = await Navigator.of(context).push(route);
+    await route.completed;
+    controller.dispose();
+    if (requirementId == null) return;
+    setState(() {
+      comment.relatedRequirementIds.add(requirementId);
+      _dirtyComments.add(comment.id);
+    });
+  }
+
+  Future<void> _deleteComment(RequirementComment comment) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete comment?'),
+        content: Text('Delete "${comment.title}"? This cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    final repository = _repository;
+    if (repository == null) return;
+    final isNew = _newComments.contains(comment.id);
+    final folder = _data.folders
+        .where((item) => item.commentIds.contains(comment.id))
+        .firstOrNull;
+    setState(() => _saving = true);
+    try {
+      if (!isNew) await repository.deleteComment(comment.id);
+      if (!mounted) return;
+      setState(() {
+        _data.comments.removeWhere((item) => item.id == comment.id);
+        folder?.commentIds.remove(comment.id);
+        _dirtyComments.remove(comment.id);
+        _newComments.remove(comment.id);
+        _selectedCommentId = null;
+        _loadEditor();
+      });
+      _showMessage('Comment deleted');
+    } catch (error) {
+      _showMessage('Could not delete comment: $error', isError: true);
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
   Widget _buildCommentEditor(BuildContext context) {
@@ -1436,9 +1702,16 @@ class _WorkspaceState extends State<_Workspace> {
                 const Icon(Icons.chat_bubble_outline),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Text(
-                    'Comment on ${_data.requirement(comment.attachedToId).displayId}',
-                    style: const TextStyle(fontSize: 10),
+                  child: TextField(
+                    controller: _commentTitleController,
+                    onChanged: (value) {
+                      comment.title = value;
+                      setState(() => _dirtyComments.add(comment.id));
+                    },
+                    decoration: const InputDecoration(
+                      labelText: 'Comment title',
+                      isDense: true,
+                    ),
                   ),
                 ),
                 if (dirty)
@@ -1448,15 +1721,22 @@ class _WorkspaceState extends State<_Workspace> {
                     color: Theme.of(context).colorScheme.primary,
                   ),
                 const SizedBox(width: 10),
-                OutlinedButton.icon(
-                  onPressed: () =>
-                      _selectRequirement(comment.attachedToId, focus: true),
-                  icon: const Icon(Icons.open_in_new),
-                  label: const Text('Open requirement'),
+                IconButton(
+                  tooltip: 'Add related requirement',
+                  onPressed: _saving
+                      ? null
+                      : () => _showAddCommentRelation(comment),
+                  icon: const Icon(Icons.add_link),
+                ),
+                IconButton(
+                  tooltip: 'Delete comment',
+                  onPressed: _saving ? null : () => _deleteComment(comment),
+                  color: Theme.of(context).colorScheme.error,
+                  icon: const Icon(Icons.delete_outline),
                 ),
                 const SizedBox(width: 8),
                 FilledButton.icon(
-                  onPressed: dirty ? _saveProject : null,
+                  onPressed: dirty && !_saving ? _saveComment : null,
                   icon: const Icon(Icons.save_outlined),
                   label: const Text('Save'),
                 ),
@@ -1464,13 +1744,64 @@ class _WorkspaceState extends State<_Workspace> {
             ),
             const SizedBox(height: 6),
             Expanded(
-              child: _EditorField(
-                label: 'Description',
-                controller: _commentController,
-                onChanged: (value) {
-                  comment.description = value;
-                  setState(() => _dirtyComments.add(comment.id));
-                },
+              child: Row(
+                children: [
+                  Expanded(
+                    flex: 3,
+                    child: _EditorField(
+                      label: 'Comment',
+                      controller: _commentController,
+                      onChanged: (value) {
+                        comment.description = value;
+                        setState(() => _dirtyComments.add(comment.id));
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    flex: 2,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          'Related requirements',
+                          style: Theme.of(context).textTheme.labelMedium,
+                        ),
+                        const Divider(height: 8),
+                        Expanded(
+                          child: ListView(
+                            children: comment.relatedRequirementIds
+                                .map(_data.requirement)
+                                .map(
+                                  (requirement) => ListTile(
+                                    dense: true,
+                                    contentPadding: EdgeInsets.zero,
+                                    title: Text(requirement.displayId),
+                                    subtitle: Text(
+                                      requirement.title,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    trailing: IconButton(
+                                      tooltip: 'Remove relationship',
+                                      onPressed: _saving
+                                          ? null
+                                          : () => setState(() {
+                                              comment.relatedRequirementIds
+                                                  .remove(requirement.id);
+                                              _dirtyComments.add(comment.id);
+                                            }),
+                                      icon: const Icon(Icons.close, size: 16),
+                                    ),
+                                  ),
+                                )
+                                .toList(),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
