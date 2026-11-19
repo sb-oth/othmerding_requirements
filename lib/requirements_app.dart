@@ -9,6 +9,14 @@ import 'models.dart';
 import 'project_repository.dart';
 import 'requirements_graph.dart';
 
+const _titleBarMenuItemStyle = ButtonStyle(
+  minimumSize: WidgetStatePropertyAll(Size.zero),
+  padding: WidgetStatePropertyAll(
+    EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+  ),
+  textStyle: WidgetStatePropertyAll(TextStyle(fontSize: 10)),
+);
+
 class RequirementsApp extends StatelessWidget {
   const RequirementsApp({super.key});
 
@@ -20,9 +28,102 @@ class RequirementsApp extends StatelessWidget {
       theme: ThemeData(
         useMaterial3: true,
         colorSchemeSeed: const Color(0xFF176B87),
-        scaffoldBackgroundColor: const Color(0xFFF5F7F9),
-        dividerColor: const Color(0xFFD8DEE7),
-        visualDensity: VisualDensity.compact,
+        scaffoldBackgroundColor: const Color(0xFFF7F8FA),
+        dividerColor: const Color(0xFFDDE1E6),
+        visualDensity: const VisualDensity(horizontal: -2, vertical: -2),
+        textTheme: Typography.material2021(platform: TargetPlatform.windows)
+            .black
+            .copyWith(
+              displayLarge: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w400,
+              ),
+              displayMedium: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w400,
+              ),
+              displaySmall: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w400,
+              ),
+              headlineLarge: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w400,
+              ),
+              headlineMedium: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w400,
+              ),
+              headlineSmall: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w400,
+              ),
+              bodyLarge: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w400,
+              ),
+              bodyMedium: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w400,
+              ),
+              bodySmall: const TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w400,
+              ),
+              labelLarge: const TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w400,
+              ),
+              labelMedium: const TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w400,
+              ),
+              labelSmall: const TextStyle(
+                fontSize: 9,
+                fontWeight: FontWeight.w400,
+              ),
+              titleLarge: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w400,
+              ),
+              titleMedium: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w400,
+              ),
+              titleSmall: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w400,
+              ),
+            ),
+        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        cardTheme: const CardThemeData(
+          elevation: 0,
+          margin: EdgeInsets.zero,
+          shape: RoundedRectangleBorder(
+            side: BorderSide(color: Color(0xFFDDE1E6)),
+            borderRadius: BorderRadius.all(Radius.circular(3)),
+          ),
+        ),
+        dialogTheme: const DialogThemeData(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.all(Radius.circular(4)),
+          ),
+        ),
+        inputDecorationTheme: const InputDecorationTheme(
+          isDense: true,
+          contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.all(Radius.circular(3)),
+          ),
+        ),
+        listTileTheme: const ListTileThemeData(
+          dense: true,
+          minVerticalPadding: 5,
+          visualDensity: VisualDensity.compact,
+        ),
+        buttonTheme: const ButtonThemeData(
+          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
       ),
       home: const _Workspace(),
     );
@@ -589,23 +690,32 @@ class _WorkspaceState extends State<_Workspace> {
         child: Row(
           children: [
             MenuAnchor(
+              style: const MenuStyle(
+                padding: WidgetStatePropertyAll(EdgeInsets.zero),
+                minimumSize: WidgetStatePropertyAll(Size.zero),
+                maximumSize: WidgetStatePropertyAll(Size.fromHeight(300)),
+              ),
               menuChildren: [
                 MenuItemButton(
+                  style: _titleBarMenuItemStyle,
                   leadingIcon: const Icon(Icons.folder_open_outlined),
                   onPressed: _openProject,
                   child: const Text('Open Project'),
                 ),
                 MenuItemButton(
+                  style: _titleBarMenuItemStyle,
                   leadingIcon: const Icon(Icons.create_new_folder_outlined),
                   onPressed: _createProject,
                   child: const Text('Create Project'),
                 ),
                 MenuItemButton(
+                  style: _titleBarMenuItemStyle,
                   leadingIcon: const Icon(Icons.save_outlined),
                   onPressed: _saving ? null : _saveProject,
                   child: const Text('Save Project'),
                 ),
                 MenuItemButton(
+                  style: _titleBarMenuItemStyle,
                   leadingIcon: const Icon(Icons.save_as_outlined),
                   onPressed: _saveProjectAs,
                   child: const Text('Save Project as'),
@@ -616,14 +726,22 @@ class _WorkspaceState extends State<_Workspace> {
                     ? controller.close
                     : controller.open,
                 style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  minimumSize: Size.zero,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  textStyle: const TextStyle(fontSize: 10),
                 ),
                 child: const Text('File'),
               ),
             ),
             MenuAnchor(
+              style: const MenuStyle(
+                padding: WidgetStatePropertyAll(EdgeInsets.zero),
+                minimumSize: WidgetStatePropertyAll(Size.zero),
+                maximumSize: WidgetStatePropertyAll(Size.fromHeight(300)),
+              ),
               menuChildren: [
                 MenuItemButton(
+                  style: _titleBarMenuItemStyle,
                   leadingIcon: const Icon(Icons.layers_outlined),
                   onPressed: () => setState(() => _variantsVisible = true),
                   child: const Text('Open Variant Editor'),
@@ -634,7 +752,9 @@ class _WorkspaceState extends State<_Workspace> {
                     ? controller.close
                     : controller.open,
                 style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  minimumSize: Size.zero,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  textStyle: const TextStyle(fontSize: 10),
                 ),
                 child: const Text('Variant'),
               ),
@@ -685,14 +805,11 @@ class _WorkspaceState extends State<_Workspace> {
       child: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+            padding: const EdgeInsets.fromLTRB(8, 6, 8, 4),
             child: Row(
               children: [
                 const Expanded(
-                  child: Text(
-                    'EXPLORER',
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
-                  ),
+                  child: Text('EXPLORER', style: TextStyle(fontSize: 10)),
                 ),
                 _IconButton(
                   tooltip: 'Add requirement',
@@ -715,7 +832,7 @@ class _WorkspaceState extends State<_Workspace> {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+            padding: const EdgeInsets.fromLTRB(8, 0, 8, 6),
             child: TextField(
               controller: _searchController,
               onChanged: (value) => setState(() => _search = value),
@@ -941,7 +1058,7 @@ class _WorkspaceState extends State<_Workspace> {
   Widget _buildEditableColumn(BuildContext context, Requirement requirement) {
     final dirty = _dirtyRequirements.contains(requirement.id);
     return Padding(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -953,28 +1070,11 @@ class _WorkspaceState extends State<_Workspace> {
                 onPressed: () =>
                     _selectRequirement(requirement.id, focus: true),
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primaryContainer,
-                  borderRadius: BorderRadius.circular(5),
-                ),
-                child: Text(
-                  requirement.displayId,
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.onPrimaryContainer,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
+              Text(requirement.displayId),
               if (dirty)
                 Padding(
                   padding: const EdgeInsets.only(left: 6),
-                  child: Icon(
-                    Icons.circle,
-                    color: Theme.of(context).colorScheme.primary,
-                    size: 8,
-                  ),
+                  child: Icon(Icons.circle, size: 8),
                 ),
               const SizedBox(width: 10),
               Expanded(
@@ -1029,7 +1129,7 @@ class _WorkspaceState extends State<_Workspace> {
               ),
             ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 6),
           Expanded(
             child: Row(
               children: [
@@ -1071,17 +1171,14 @@ class _WorkspaceState extends State<_Workspace> {
     ValueChanged<int>? onRemove,
   }) {
     return Padding(
-      padding: const EdgeInsets.all(10),
+      padding: const EdgeInsets.all(7),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
               Expanded(
-                child: Text(
-                  title,
-                  style: const TextStyle(fontWeight: FontWeight.w700),
-                ),
+                child: Text(title, style: const TextStyle(fontSize: 10)),
               ),
               if (editable)
                 IconButton(
@@ -1092,7 +1189,7 @@ class _WorkspaceState extends State<_Workspace> {
             ],
           ),
           const Divider(height: 1),
-          const SizedBox(height: 6),
+          const SizedBox(height: 4),
           if (requirements.isEmpty)
             const Padding(
               padding: EdgeInsets.only(top: 18),
@@ -1176,7 +1273,7 @@ class _WorkspaceState extends State<_Workspace> {
                       border: const OutlineInputBorder(),
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 8),
                   Expanded(
                     child: available.isEmpty
                         ? const Center(child: Text('No requirements found'))
@@ -1229,7 +1326,7 @@ class _WorkspaceState extends State<_Workspace> {
     return ColoredBox(
       color: Theme.of(context).colorScheme.surface,
       child: Padding(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(8),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -1240,7 +1337,7 @@ class _WorkspaceState extends State<_Workspace> {
                 Expanded(
                   child: Text(
                     'Comment on ${_data.requirement(comment.attachedToId).displayId}',
-                    style: const TextStyle(fontWeight: FontWeight.w700),
+                    style: const TextStyle(fontSize: 10),
                   ),
                 ),
                 if (dirty)
@@ -1264,7 +1361,7 @@ class _WorkspaceState extends State<_Workspace> {
                 ),
               ],
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 6),
             Expanded(
               child: _EditorField(
                 label: 'Description',
@@ -1286,7 +1383,7 @@ class _WorkspaceState extends State<_Workspace> {
         .where((variant) => variant.parentId == 0)
         .toList();
     return Padding(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1299,10 +1396,7 @@ class _WorkspaceState extends State<_Workspace> {
               ),
               const SizedBox(width: 14),
               const Expanded(
-                child: Text(
-                  'Variants',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
-                ),
+                child: Text('Variants', style: TextStyle(fontSize: 13)),
               ),
               FilledButton.icon(
                 onPressed: () => _showVariantDialog(),
@@ -1311,7 +1405,7 @@ class _WorkspaceState extends State<_Workspace> {
               ),
             ],
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 8),
           Expanded(
             child: ListView(
               children: [

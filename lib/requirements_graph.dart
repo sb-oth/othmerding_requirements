@@ -172,33 +172,32 @@ class _RequirementNode extends StatelessWidget {
           color: borderColor,
           width: selected || highlighted ? 2 : 1,
         ),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(3),
       ),
       child: InkWell(
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(3),
         onTap: onTap,
         child: SizedBox(
-          width: 216,
-          height: 86,
+          width: 208,
+          height: 72,
           child: Padding(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(9),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   requirement.displayId,
-                  style: TextStyle(
-                    color: colorScheme.primary,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                  ),
+                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.w400),
                 ),
-                const SizedBox(height: 5),
+                const SizedBox(height: 3),
                 Text(
                   requirement.title,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontWeight: FontWeight.w600),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w400,
+                  ),
                 ),
               ],
             ),
