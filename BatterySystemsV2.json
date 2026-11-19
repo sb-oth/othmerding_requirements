@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "name": "BatterySystemsV2",
-  "nextRequirementNumber": 1,
-  "nextEntityId": 102,
+  "nextRequirementNumber": 9,
+  "nextEntityId": 110,
   "folders": [
     {
       "id": 1,
@@ -10,13 +10,96 @@
       "description": "",
       "parent": null,
       "contents": {
-        "requirements": [],
+        "requirements": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8
+        ],
         "comments": [],
         "folders": []
       }
     }
   ],
-  "requirements": [],
+  "requirements": [
+    {
+      "id": 1,
+      "title": "New requirement",
+      "description": "",
+      "rationale": "",
+      "variant": 101,
+      "relations": []
+    },
+    {
+      "id": 2,
+      "title": "New requirement",
+      "description": "",
+      "rationale": "",
+      "variant": 101,
+      "relations": [
+        {
+          "type": "specifies",
+          "target": 1
+        },
+        {
+          "type": "specifies",
+          "target": 7
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "New requirement",
+      "description": "",
+      "rationale": "",
+      "variant": 101,
+      "relations": []
+    },
+    {
+      "id": 4,
+      "title": "New requirement",
+      "description": "",
+      "rationale": "",
+      "variant": 101,
+      "relations": []
+    },
+    {
+      "id": 5,
+      "title": "New requirement",
+      "description": "",
+      "rationale": "",
+      "variant": 101,
+      "relations": []
+    },
+    {
+      "id": 6,
+      "title": "New requirement",
+      "description": "",
+      "rationale": "",
+      "variant": 101,
+      "relations": []
+    },
+    {
+      "id": 7,
+      "title": "New requirement",
+      "description": "",
+      "rationale": "Blabla",
+      "variant": 101,
+      "relations": []
+    },
+    {
+      "id": 8,
+      "title": "New requirement",
+      "description": "",
+      "rationale": "",
+      "variant": 101,
+      "relations": []
+    }
+  ],
   "comments": [],
   "variants": [
     {

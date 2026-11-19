@@ -25,106 +25,7 @@ class RequirementsApp extends StatelessWidget {
     return MaterialApp(
       title: 'Oth Requirements',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        colorSchemeSeed: const Color(0xFF176B87),
-        scaffoldBackgroundColor: const Color(0xFFF7F8FA),
-        dividerColor: const Color(0xFFDDE1E6),
-        visualDensity: const VisualDensity(horizontal: -2, vertical: -2),
-        textTheme: Typography.material2021(platform: TargetPlatform.windows)
-            .black
-            .copyWith(
-              displayLarge: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w400,
-              ),
-              displayMedium: const TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w400,
-              ),
-              displaySmall: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w400,
-              ),
-              headlineLarge: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w400,
-              ),
-              headlineMedium: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w400,
-              ),
-              headlineSmall: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w400,
-              ),
-              bodyLarge: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w400,
-              ),
-              bodyMedium: const TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w400,
-              ),
-              bodySmall: const TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w400,
-              ),
-              labelLarge: const TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w400,
-              ),
-              labelMedium: const TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w400,
-              ),
-              labelSmall: const TextStyle(
-                fontSize: 9,
-                fontWeight: FontWeight.w400,
-              ),
-              titleLarge: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w400,
-              ),
-              titleMedium: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w400,
-              ),
-              titleSmall: const TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w400,
-              ),
-            ),
-        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        cardTheme: const CardThemeData(
-          elevation: 0,
-          margin: EdgeInsets.zero,
-          shape: RoundedRectangleBorder(
-            side: BorderSide(color: Color(0xFFDDE1E6)),
-            borderRadius: BorderRadius.all(Radius.circular(3)),
-          ),
-        ),
-        dialogTheme: const DialogThemeData(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.all(Radius.circular(4)),
-          ),
-        ),
-        inputDecorationTheme: const InputDecorationTheme(
-          isDense: true,
-          contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.all(Radius.circular(3)),
-          ),
-        ),
-        listTileTheme: const ListTileThemeData(
-          dense: true,
-          minVerticalPadding: 5,
-          visualDensity: VisualDensity.compact,
-        ),
-        buttonTheme: const ButtonThemeData(
-          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        ),
-      ),
+      theme: ThemeData(useMaterial3: true, fontFamily: 'Figtree'),
       home: const _Workspace(),
     );
   }
@@ -138,10 +39,12 @@ class _Workspace extends StatefulWidget {
 }
 
 class _WorkspaceState extends State<_Workspace> {
-  ProjectRepository _repository = ProjectRepository();
+  final LastProjectStore _lastProjectStore = LastProjectStore();
+  ProjectRepository? _repository;
   final TextEditingController _searchController = TextEditingController();
   RequirementProject? _project;
   Object? _loadError;
+  bool _loadingProject = true;
   int? _selectedFolderId;
   int? _selectedRequirementId;
   int? _highlightedRequirementId;
@@ -151,6 +54,7 @@ class _WorkspaceState extends State<_Workspace> {
   bool _variantsVisible = false;
   final Set<int> _expandedFolders = {1};
   final Set<int> _dirtyRequirements = {};
+  final Set<int> _newRequirements = {};
   final Set<int> _dirtyComments = {};
   final Map<int, Requirement> _requirementBaselines = {};
   bool _projectDirty = false;
@@ -165,6 +69,7 @@ class _WorkspaceState extends State<_Workspace> {
   bool get _hasChanges =>
       _projectDirty ||
       _dirtyRequirements.isNotEmpty ||
+      _newRequirements.isNotEmpty ||
       _dirtyComments.isNotEmpty;
 
   @override
@@ -189,33 +94,29 @@ class _WorkspaceState extends State<_Workspace> {
 
   Future<void> _loadProject() async {
     try {
-      final project = await _repository.load();
+      final path = await _lastProjectStore.load();
+      if (path == null) {
+        if (!mounted) return;
+        setState(() {
+          _loadError = null;
+          _loadingProject = false;
+        });
+        return;
+      }
+      final repository = ProjectRepository(path: path);
+      final project = await repository.load();
       if (!mounted) return;
       setState(() {
-        _project = project;
-        _selectedFolderId = project.folders.first.id;
-        _selectedRequirementId = project.requirements.isEmpty
-            ? null
-            : project.requirements.first.id;
-        _expandedFolders
-          ..clear()
-          ..addAll(
-            project.folders
-                .where((folder) => folder.parentId == null)
-                .map((e) => e.id),
-          );
-        _requirementBaselines
-          ..clear()
-          ..addEntries(
-            project.requirements.map(
-              (requirement) => MapEntry(requirement.id, requirement.copy()),
-            ),
-          );
-        _loadEditor();
+        _repository = repository;
+        _setCurrentProject(project);
+        _loadingProject = false;
       });
     } catch (error) {
       if (!mounted) return;
-      setState(() => _loadError = error);
+      setState(() {
+        _loadError = error;
+        _loadingProject = false;
+      });
     }
   }
 
@@ -239,13 +140,16 @@ class _WorkspaceState extends State<_Workspace> {
             .firstOrNull;
 
   Future<void> _saveProject() async {
-    if (_saving) return;
+    final repository = _repository;
+    if (_saving || repository == null) return;
     setState(() => _saving = true);
     try {
-      await _repository.save(_data);
+      await repository.save(_data);
+      final rememberError = await _rememberProjectPath(repository.path);
       if (!mounted) return;
       setState(() {
         _dirtyRequirements.clear();
+        _newRequirements.clear();
         _dirtyComments.clear();
         _projectDirty = false;
         _requirementBaselines
@@ -256,9 +160,59 @@ class _WorkspaceState extends State<_Workspace> {
             ),
           );
       });
-      _showMessage('Project saved');
+      _showMessage(
+        rememberError == null
+            ? 'Project saved'
+            : 'Project saved, but could not remember its location: '
+                  '$rememberError',
+        isError: rememberError != null,
+      );
     } catch (error) {
       _showMessage('Could not save project: $error', isError: true);
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _saveRequirement() async {
+    final repository = _repository;
+    final requirement = _activeRequirement;
+    final id = requirement?.id;
+    if (_saving || repository == null || requirement == null || id == null) {
+      return;
+    }
+
+    final savedRequirement = requirement.copy();
+    setState(() => _saving = true);
+    try {
+      await repository.saveRequirement(
+        savedRequirement,
+        folderId: _data.containingFolder(id)?.id,
+        nextEntityId: _data.nextEntityId,
+      );
+      final rememberError = await _rememberProjectPath(repository.path);
+      if (!mounted) return;
+      setState(() {
+        _requirementBaselines[id] = savedRequirement.copy();
+        _newRequirements.remove(id);
+        final current = _data.requirements
+            .where((item) => item.id == id)
+            .firstOrNull;
+        if (current != null &&
+            jsonEncode(current.toJson()) ==
+                jsonEncode(savedRequirement.toJson())) {
+          _dirtyRequirements.remove(id);
+        }
+      });
+      _showMessage(
+        rememberError == null
+            ? 'Requirement saved'
+            : 'Requirement saved, but could not remember its location: '
+                  '$rememberError',
+        isError: rememberError != null,
+      );
+    } catch (error) {
+      _showMessage('Could not save requirement: $error', isError: true);
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -303,7 +257,14 @@ class _WorkspaceState extends State<_Workspace> {
         _repository = repository;
         _setCurrentProject(project);
       });
-      _showMessage('Opened ${project.name}');
+      final rememberError = await _rememberProjectPath(path);
+      _showMessage(
+        rememberError == null
+            ? 'Opened ${project.name}'
+            : 'Opened ${project.name}, but could not remember its location: '
+                  '$rememberError',
+        isError: rememberError != null,
+      );
     } catch (error) {
       _showMessage('Could not open project: $error', isError: true);
     }
@@ -338,6 +299,7 @@ class _WorkspaceState extends State<_Workspace> {
       ..clear()
       ..add(project.folders.first.id);
     _dirtyRequirements.clear();
+    _newRequirements.clear();
     _dirtyComments.clear();
     _requirementBaselines
       ..clear()
@@ -373,9 +335,25 @@ class _WorkspaceState extends State<_Workspace> {
         _repository = repository;
         _setCurrentProject(project);
       });
-      _showMessage('Created $name');
+      final rememberError = await _rememberProjectPath(outputPath);
+      _showMessage(
+        rememberError == null
+            ? 'Created $name'
+            : 'Created $name, but could not remember its location: '
+                  '$rememberError',
+        isError: rememberError != null,
+      );
     } catch (error) {
       _showMessage('Could not create project: $error', isError: true);
+    }
+  }
+
+  Future<Object?> _rememberProjectPath(String path) async {
+    try {
+      await _lastProjectStore.save(path);
+      return null;
+    } catch (error) {
+      return error;
     }
   }
 
@@ -492,7 +470,7 @@ class _WorkspaceState extends State<_Workspace> {
     final requirement = _data.createRequirement(_selectedFolderId!);
     _requirementBaselines[requirement.id] = requirement.copy();
     _dirtyRequirements.add(requirement.id);
-    _projectDirty = true;
+    _newRequirements.add(requirement.id);
     _expandedFolders.add(_selectedFolderId!);
     _selectRequirement(requirement.id, focus: true);
   }
@@ -576,7 +554,7 @@ class _WorkspaceState extends State<_Workspace> {
     setState(() {});
   }
 
-  void _discardRequirementChanges() {
+  void _revertRequirementChanges() {
     final id = _selectedRequirementId;
     if (id == null) return;
     final current = _data.requirement(id);
@@ -590,7 +568,7 @@ class _WorkspaceState extends State<_Workspace> {
     }
     _loadEditor();
     setState(() => _dirtyRequirements.remove(id));
-    _showMessage('Changes discarded');
+    _showMessage('Requirement changes reverted');
   }
 
   List<int> get _graphIds {
@@ -618,24 +596,53 @@ class _WorkspaceState extends State<_Workspace> {
 
   @override
   Widget build(BuildContext context) {
-    if (_loadError != null) {
+    if (_project == null) {
+      if (_loadingProject) {
+        return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      }
       return Scaffold(
         body: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.error_outline, size: 48),
+              Icon(
+                _loadError == null
+                    ? Icons.folder_open_outlined
+                    : Icons.error_outline,
+                size: 48,
+              ),
               const SizedBox(height: 16),
-              Text('Could not open the project database.\n$_loadError'),
+              Text(
+                _loadError == null
+                    ? 'No project is open. Open an existing project or create one.'
+                    : 'Could not reopen the last project.\n$_loadError',
+                textAlign: TextAlign.center,
+              ),
               const SizedBox(height: 16),
-              FilledButton(onPressed: _loadProject, child: const Text('Retry')),
+              Wrap(
+                spacing: 8,
+                children: [
+                  if (_loadError != null)
+                    TextButton(
+                      onPressed: _loadProject,
+                      child: const Text('Retry'),
+                    ),
+                  OutlinedButton.icon(
+                    onPressed: _openProject,
+                    icon: const Icon(Icons.folder_open_outlined),
+                    label: const Text('Open Project'),
+                  ),
+                  FilledButton.icon(
+                    onPressed: _createProject,
+                    icon: const Icon(Icons.create_new_folder_outlined),
+                    label: const Text('Create Project'),
+                  ),
+                ],
+              ),
             ],
           ),
         ),
       );
-    }
-    if (_project == null) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
     return Scaffold(
       body: Column(
@@ -680,7 +687,7 @@ class _WorkspaceState extends State<_Workspace> {
   }
 
   Widget _buildTitleBar(BuildContext context) {
-    final title = '${_data.name} — ${_repository.path}';
+    final title = '${_data.name} — ${_repository!.path}';
     return GestureDetector(
       onPanStart: (_) => windowManager.startDragging(),
       behavior: HitTestBehavior.translucent,
@@ -1118,13 +1125,13 @@ class _WorkspaceState extends State<_Workspace> {
               ),
               const SizedBox(width: 8),
               IconButton(
-                tooltip: 'Discard',
-                onPressed: dirty ? _discardRequirementChanges : null,
+                tooltip: 'Revert requirement changes',
+                onPressed: dirty ? _revertRequirementChanges : null,
                 icon: const Icon(Icons.undo),
               ),
               IconButton.filled(
-                tooltip: 'Save',
-                onPressed: dirty ? _saveProject : null,
+                tooltip: 'Save requirement',
+                onPressed: dirty && !_saving ? _saveRequirement : null,
                 icon: const Icon(Icons.save_outlined),
               ),
             ],

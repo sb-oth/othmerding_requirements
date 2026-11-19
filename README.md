@@ -21,9 +21,8 @@ flutter pub get
 flutter run -d windows
 ```
 
-The Windows application stores its project at
-`%USERPROFILE%\Documents\OthRequirements\project.json`. A sample project is
-created on first launch.
+On first launch, open an existing project or create one. The application
+remembers the last opened project and restores it on subsequent launches.
 
 ## Validate
 

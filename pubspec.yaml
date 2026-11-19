@@ -59,6 +59,14 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
+  fonts:
+    - family: Figtree
+      fonts:
+        - asset: styleguide/fonts/Figtree-Regular.ttf
+          weight: 400
+        - asset: styleguide/fonts/Figtree-Bold.ttf
+          weight: 700
+
   # To add assets to your application, add an assets section, like this:
   # assets:
   #   - images/a_dot_burr.jpeg
