@@ -71,6 +71,46 @@ class ProjectRepository {
     }
     await save(project);
   }
+
+  Future<void> deleteRequirement(int requirementId) async {
+    final project = await load();
+    final requirementIndex = project.requirements.indexWhere(
+      (item) => item.id == requirementId,
+    );
+    if (requirementIndex == -1) {
+      throw StateError('Requirement $requirementId does not exist.');
+    }
+
+    final requirement = project.requirements[requirementIndex];
+    if (requirement.outgoingIds.isNotEmpty) {
+      throw StateError(
+        'Remove all outgoing relations before deleting this requirement.',
+      );
+    }
+    if (project.requirements.any(
+      (item) =>
+          item.id != requirementId && item.outgoingIds.contains(requirementId),
+    )) {
+      throw StateError(
+        'Remove all incoming relations before deleting this requirement.',
+      );
+    }
+    if (project.comments.any(
+      (comment) => comment.attachedToId == requirementId,
+    )) {
+      throw StateError(
+        'Remove comments attached to this requirement before deleting it.',
+      );
+    }
+
+    final folder = project.containingFolder(requirementId);
+    if (folder == null) {
+      throw StateError('Requirement $requirementId is not in a folder.');
+    }
+    folder.requirementIds.remove(requirementId);
+    project.requirements.removeAt(requirementIndex);
+    await save(project);
+  }
 }
 
 class LastProjectStore {

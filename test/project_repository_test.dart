@@ -92,6 +92,76 @@ void main() {
     expect(restored.nextRequirementNumber, requirement.id + 1);
   });
 
+  test(
+    'prevents deleting requirements with incoming or outgoing relations',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'oth_requirements_test_',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      final repository = ProjectRepository(
+        path: '${directory.path}${Platform.pathSeparator}project.json',
+      );
+      final project = RequirementProject.empty(name: 'Linked requirements');
+      final source = project.createRequirement(1);
+      final target = project.createRequirement(1);
+      source.outgoingIds.add(target.id);
+      await repository.save(project);
+
+      await expectLater(
+        repository.deleteRequirement(source.id),
+        throwsA(isA<StateError>()),
+      );
+      await expectLater(
+        repository.deleteRequirement(target.id),
+        throwsA(isA<StateError>()),
+      );
+
+      final restored = await repository.load();
+      expect(restored.requirements, hasLength(2));
+      expect(restored.requirement(source.id).outgoingIds, [target.id]);
+    },
+  );
+
+  test('deletes an unreferenced requirement and its folder entry', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'oth_requirements_test_',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+    final repository = ProjectRepository(
+      path: '${directory.path}${Platform.pathSeparator}project.json',
+    );
+    final project = RequirementProject.empty(name: 'Single requirement');
+    final requirement = project.createRequirement(1);
+    await repository.save(project);
+
+    await repository.deleteRequirement(requirement.id);
+
+    final restored = await repository.load();
+    expect(restored.requirements, isEmpty);
+    expect(restored.folder(1).requirementIds, isEmpty);
+  });
+
+  test('prevents deleting requirements that have attached comments', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'oth_requirements_test_',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+    final repository = ProjectRepository(
+      path: '${directory.path}${Platform.pathSeparator}project.json',
+    );
+    final project = RequirementProject.empty(name: 'Commented requirement');
+    final requirement = project.createRequirement(1);
+    project.createComment(1, requirement.id);
+    await repository.save(project);
+
+    await expectLater(
+      repository.deleteRequirement(requirement.id),
+      throwsA(isA<StateError>()),
+    );
+    expect((await repository.load()).requirements, hasLength(1));
+  });
+
   test('remembers the last opened project path', () async {
     final directory = await Directory.systemTemp.createTemp(
       'oth_requirements_test_',

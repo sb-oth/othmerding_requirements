@@ -571,6 +571,92 @@ class _WorkspaceState extends State<_Workspace> {
     _showMessage('Requirement changes reverted');
   }
 
+  String? _requirementDeletionBlockReason(int requirementId) {
+    final requirement = _data.requirement(requirementId);
+    if (requirement.outgoingIds.isNotEmpty) {
+      return 'Remove outgoing relations before deleting this requirement.';
+    }
+    if (_data.requirements.any(
+      (item) =>
+          item.id != requirementId && item.outgoingIds.contains(requirementId),
+    )) {
+      return 'Remove incoming relations before deleting this requirement.';
+    }
+    if (_data.comments.any(
+      (comment) => comment.attachedToId == requirementId,
+    )) {
+      return 'Remove comments attached to this requirement before deleting it.';
+    }
+    return null;
+  }
+
+  Future<void> _deleteRequirement(Requirement requirement) async {
+    final id = requirement.id;
+    final blockReason = _requirementDeletionBlockReason(id);
+    if (blockReason != null) {
+      _showMessage(blockReason, isError: true);
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete requirement?'),
+        content: Text(
+          'Delete ${requirement.displayId} "${requirement.title}"? '
+          'This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    final current = _data.requirements
+        .where((item) => item.id == id)
+        .firstOrNull;
+    if (current == null) return;
+    final updatedBlockReason = _requirementDeletionBlockReason(id);
+    if (updatedBlockReason != null) {
+      _showMessage(updatedBlockReason, isError: true);
+      return;
+    }
+
+    final repository = _repository;
+    if (repository == null) return;
+    final folderId = _data.containingFolder(id)?.id;
+    final isNew = _newRequirements.contains(id);
+    final displayId = requirement.displayId;
+    setState(() => _saving = true);
+    try {
+      if (!isNew) await repository.deleteRequirement(id);
+      if (!mounted) return;
+      setState(() {
+        _data.requirements.removeWhere((item) => item.id == id);
+        if (folderId != null) _data.folder(folderId).requirementIds.remove(id);
+        _requirementBaselines.remove(id);
+        _dirtyRequirements.remove(id);
+        _newRequirements.remove(id);
+        _selectedRequirementId = null;
+        _selectedCommentId = null;
+        _highlightedRequirementId = null;
+        _loadEditor();
+      });
+      _showMessage('Deleted $displayId');
+    } catch (error) {
+      _showMessage('Could not delete requirement: $error', isError: true);
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
   List<int> get _graphIds {
     if (_selectedRequirementId != null) {
       final selected = _data.requirement(_selectedRequirementId!);
@@ -1128,6 +1214,14 @@ class _WorkspaceState extends State<_Workspace> {
                 tooltip: 'Revert requirement changes',
                 onPressed: dirty ? _revertRequirementChanges : null,
                 icon: const Icon(Icons.undo),
+              ),
+              IconButton(
+                tooltip: 'Delete requirement',
+                onPressed: _saving
+                    ? null
+                    : () => _deleteRequirement(requirement),
+                color: Theme.of(context).colorScheme.error,
+                icon: const Icon(Icons.delete_outline),
               ),
               IconButton.filled(
                 tooltip: 'Save requirement',
