@@ -8,7 +8,10 @@ comments, relationships, and hierarchical variants.
 - Create a project in a location selected with the Windows Save dialog
 - VS Code-style explorer with folders, requirements, and comments
 - Search by ID, variant (`version:`), or free text
-- Orthogonal relationship graph with Derived, Related, and Contained links
+- Orthogonal relationship graph with separate ports and routing lanes for
+  Derived, Related, and Contained links (lines may cross but do not overlap)
+- Selected graph nodes are centered, with incoming links on the left and
+  outgoing links on the right
 - Titled comments shown in the diagram and related to one or more requirements
 - Editable requirement title, description, rationale, variant, and relations
 - Dirty-state indicators and explicit project saving

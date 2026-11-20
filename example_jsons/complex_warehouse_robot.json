@@ -1,0 +1,951 @@
+{
+  "schemaVersion": 1,
+  "name": "Autonomous Warehouse Robot",
+  "nextRequirementNumber": 49,
+  "nextEntityId": 1000,
+  "folders": [
+    {
+      "id": 1,
+      "name": "Warehouse Robot",
+      "description": "",
+      "parent": null,
+      "contents": {
+        "requirements": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "comments": [],
+        "folders": [
+          2,
+          5,
+          8,
+          11,
+          13
+        ]
+      }
+    },
+    {
+      "id": 2,
+      "name": "System Architecture",
+      "description": "Top-level software and subsystem behavior.",
+      "parent": 1,
+      "contents": {
+        "requirements": [
+          5,
+          6,
+          7
+        ],
+        "comments": [],
+        "folders": [
+          3,
+          4
+        ]
+      }
+    },
+    {
+      "id": 3,
+      "name": "Motion Control",
+      "description": "Drive, steering, braking, and load interlocks.",
+      "parent": 2,
+      "contents": {
+        "requirements": [
+          8,
+          9,
+          10,
+          11,
+          12,
+          13
+        ],
+        "comments": [],
+        "folders": []
+      }
+    },
+    {
+      "id": 4,
+      "name": "Diagnostics",
+      "description": "Fault reporting and service observability.",
+      "parent": 2,
+      "contents": {
+        "requirements": [
+          14,
+          15,
+          16
+        ],
+        "comments": [],
+        "folders": []
+      }
+    },
+    {
+      "id": 5,
+      "name": "Navigation",
+      "description": "Mission routing, localization, and path planning.",
+      "parent": 1,
+      "contents": {
+        "requirements": [
+          17,
+          18
+        ],
+        "comments": [],
+        "folders": [
+          6,
+          7
+        ]
+      }
+    },
+    {
+      "id": 6,
+      "name": "Localization",
+      "description": "Pose estimation and recovery behavior.",
+      "parent": 5,
+      "contents": {
+        "requirements": [
+          19,
+          20,
+          21,
+          22,
+          23
+        ],
+        "comments": [
+          901
+        ],
+        "folders": []
+      }
+    },
+    {
+      "id": 7,
+      "name": "Path Planning",
+      "description": "Route selection and obstacle handling.",
+      "parent": 5,
+      "contents": {
+        "requirements": [
+          24,
+          25,
+          26,
+          27
+        ],
+        "comments": [],
+        "folders": []
+      }
+    },
+    {
+      "id": 8,
+      "name": "Safety",
+      "description": "Protective behavior and emergency response.",
+      "parent": 1,
+      "contents": {
+        "requirements": [
+          28,
+          29
+        ],
+        "comments": [],
+        "folders": [
+          9,
+          10
+        ]
+      }
+    },
+    {
+      "id": 9,
+      "name": "Functional Safety",
+      "description": "Safety controller and protective functions.",
+      "parent": 8,
+      "contents": {
+        "requirements": [
+          30,
+          31,
+          32,
+          33,
+          34
+        ],
+        "comments": [
+          902
+        ],
+        "folders": []
+      }
+    },
+    {
+      "id": 10,
+      "name": "Emergency Handling",
+      "description": "Emergency stop behavior and event capture.",
+      "parent": 8,
+      "contents": {
+        "requirements": [
+          35,
+          36,
+          37
+        ],
+        "comments": [],
+        "folders": []
+      }
+    },
+    {
+      "id": 11,
+      "name": "Power and Charging",
+      "description": "Energy reserve and charging behavior.",
+      "parent": 1,
+      "contents": {
+        "requirements": [
+          38,
+          39
+        ],
+        "comments": [],
+        "folders": [
+          12
+        ]
+      }
+    },
+    {
+      "id": 12,
+      "name": "Battery Management",
+      "description": "Battery state, thermal protection, and recovery.",
+      "parent": 11,
+      "contents": {
+        "requirements": [
+          40,
+          41,
+          42,
+          43
+        ],
+        "comments": [
+          900
+        ],
+        "folders": []
+      }
+    },
+    {
+      "id": 13,
+      "name": "Communications",
+      "description": "Fleet network communication and command security.",
+      "parent": 1,
+      "contents": {
+        "requirements": [
+          44,
+          45,
+          46,
+          47,
+          48
+        ],
+        "comments": [],
+        "folders": []
+      }
+    }
+  ],
+  "requirements": [
+    {
+      "id": 1,
+      "title": "Mission execution",
+      "description": "The robot shall execute warehouse transport missions from pickup through delivery.",
+      "rationale": "End-to-end mission execution is the core operational capability.",
+      "variant": 101,
+      "relations": [
+        {
+          "type": "derived",
+          "target": 28
+        },
+        {
+          "type": "related",
+          "target": 4
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Payload capacity",
+      "description": "The robot shall transport payloads weighing up to 500 kg on approved floor surfaces.",
+      "rationale": "A defined capacity supports safe selection of the robot for each task.",
+      "variant": 101,
+      "relations": [
+        {
+          "type": "derived",
+          "target": 5
+        },
+        {
+          "type": "contained",
+          "target": 6
+        },
+        {
+          "type": "related",
+          "target": 3
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Throughput target",
+      "description": "The fleet shall support at least 120 completed transport missions per hour in the high-throughput configuration.",
+      "rationale": "A measurable throughput target enables capacity planning.",
+      "variant": 103,
+      "relations": [
+        {
+          "type": "derived",
+          "target": 24
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Operating environment",
+      "description": "The robot shall operate on indoor warehouse floors between 5 C and 40 C.",
+      "rationale": "Environmental limits define the validated operating envelope.",
+      "variant": 101,
+      "relations": [
+        {
+          "type": "derived",
+          "target": 17
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Subsystem interfaces",
+      "description": "The control software shall exchange typed commands and status with each robot subsystem.",
+      "rationale": "Stable interfaces reduce coupling between subsystem implementations.",
+      "variant": 101,
+      "relations": [
+        {
+          "type": "derived",
+          "target": 14
+        },
+        {
+          "type": "contained",
+          "target": 7
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Operational state model",
+      "description": "The robot shall expose Idle, Ready, Executing, Paused, and Faulted operational states.",
+      "rationale": "A common state model keeps operator and subsystem behavior consistent.",
+      "variant": 101,
+      "relations": [
+        {
+          "type": "derived",
+          "target": 8
+        },
+        {
+          "type": "related",
+          "target": 16
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Diagnostic event model",
+      "description": "The robot shall assign each diagnostic event a code, severity, timestamp, and source subsystem.",
+      "rationale": "Structured events support troubleshooting and fleet analysis.",
+      "variant": 101,
+      "relations": [
+        {
+          "type": "derived",
+          "target": 15
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Velocity control",
+      "description": "The motion controller shall regulate commanded linear velocity within 5 percent of the requested value on a level floor.",
+      "rationale": "Accurate velocity control is required for predictable navigation.",
+      "variant": 101,
+      "relations": [
+        {
+          "type": "derived",
+          "target": 11
+        },
+        {
+          "type": "contained",
+          "target": 9
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "Steering control",
+      "description": "The motion controller shall follow steering commands without exceeding the validated turning radius.",
+      "rationale": "Bounded steering behavior prevents collisions in narrow aisles.",
+      "variant": 101,
+      "relations": [
+        {
+          "type": "derived",
+          "target": 12
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "title": "Braking control",
+      "description": "The motion controller shall stop the robot within 0.6 m from 1.0 m/s on a dry level floor.",
+      "rationale": "A bounded stopping distance is needed for safe operation.",
+      "variant": 101,
+      "relations": [
+        {
+          "type": "derived",
+          "target": 13
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "title": "Load handling interlock",
+      "description": "The robot shall inhibit movement when a load-handling mechanism is not in its travel-safe position.",
+      "rationale": "The interlock prevents movement with an unstable load.",
+      "variant": 101,
+      "relations": [
+        {
+          "type": "related",
+          "target": 12
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "title": "Wheel slip detection",
+      "description": "The motion controller shall detect wheel slip when measured wheel speed differs from estimated ground speed by more than 15 percent for 200 ms.",
+      "rationale": "Early detection allows the robot to reduce torque before losing control.",
+      "variant": 102,
+      "relations": []
+    },
+    {
+      "id": 13,
+      "title": "Motion watchdog",
+      "description": "The motion controller shall enter a controlled stop if command updates are absent for 250 ms.",
+      "rationale": "A watchdog limits motion after a control task failure.",
+      "variant": 101,
+      "relations": []
+    },
+    {
+      "id": 14,
+      "title": "Fault reporting",
+      "description": "Each subsystem shall publish active faults and their recovery state through the diagnostic event model.",
+      "rationale": "Consistent fault reporting supports service and operations.",
+      "variant": 101,
+      "relations": [
+        {
+          "type": "derived",
+          "target": 15
+        },
+        {
+          "type": "related",
+          "target": 16
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "title": "Diagnostic log retention",
+      "description": "The robot shall retain at least 30 days of diagnostic events or 10000 events, whichever is reached first.",
+      "rationale": "A retained history supports analysis of intermittent faults.",
+      "variant": 103,
+      "relations": []
+    },
+    {
+      "id": 16,
+      "title": "Service access",
+      "description": "Authorized service personnel shall be able to export diagnostic events without disabling safety functions.",
+      "rationale": "Service access should not interfere with safe operation.",
+      "variant": 101,
+      "relations": []
+    },
+    {
+      "id": 17,
+      "title": "Navigation mission input",
+      "description": "The navigation subsystem shall accept a destination expressed as a mapped station or waypoint identifier.",
+      "rationale": "Consistent mission input allows warehouse systems to dispatch work.",
+      "variant": 101,
+      "relations": [
+        {
+          "type": "derived",
+          "target": 19
+        },
+        {
+          "type": "contained",
+          "target": 18
+        }
+      ]
+    },
+    {
+      "id": 18,
+      "title": "Route execution",
+      "description": "The navigation subsystem shall follow a collision-free route and report progress at least once per second.",
+      "rationale": "Progress updates support supervision and recovery.",
+      "variant": 103,
+      "relations": [
+        {
+          "type": "derived",
+          "target": 26
+        },
+        {
+          "type": "contained",
+          "target": 24
+        }
+      ]
+    },
+    {
+      "id": 19,
+      "title": "Pose estimate",
+      "description": "The robot shall estimate its planar position and heading with a 95th-percentile position error below 0.10 m in mapped aisles.",
+      "rationale": "Accurate pose estimation is required for aisle navigation.",
+      "variant": 101,
+      "relations": [
+        {
+          "type": "derived",
+          "target": 20
+        },
+        {
+          "type": "related",
+          "target": 23
+        }
+      ]
+    },
+    {
+      "id": 20,
+      "title": "Sensor fusion",
+      "description": "The localization subsystem shall fuse wheel odometry with at least one independent environmental sensor.",
+      "rationale": "Sensor fusion reduces drift from any single measurement source.",
+      "variant": 101,
+      "relations": [
+        {
+          "type": "derived",
+          "target": 21
+        },
+        {
+          "type": "related",
+          "target": 22
+        }
+      ]
+    },
+    {
+      "id": 21,
+      "title": "Localization confidence",
+      "description": "The localization subsystem shall publish a confidence value with every pose estimate.",
+      "rationale": "Consumers need confidence information to handle uncertain positions.",
+      "variant": 101,
+      "relations": [
+        {
+          "type": "derived",
+          "target": 22
+        }
+      ]
+    },
+    {
+      "id": 22,
+      "title": "Localization loss detection",
+      "description": "The robot shall declare localization degraded when pose confidence remains below the configured threshold for 1 second.",
+      "rationale": "Prompt detection prevents the robot from acting on unreliable position data.",
+      "variant": 102,
+      "relations": [
+        {
+          "type": "derived",
+          "target": 23
+        }
+      ]
+    },
+    {
+      "id": 23,
+      "title": "Relocalization recovery",
+      "description": "After localization is degraded, the robot shall attempt relocalization while stationary before resuming autonomous motion.",
+      "rationale": "Stationary recovery reduces the risk of motion from a false pose.",
+      "variant": 101,
+      "relations": []
+    },
+    {
+      "id": 24,
+      "title": "Path obstacle handling",
+      "description": "The path planner shall stop or replan when an obstacle blocks the next 2 m of the active route.",
+      "rationale": "Dynamic obstacle handling prevents unsafe route continuation.",
+      "variant": 101,
+      "relations": [
+        {
+          "type": "derived",
+          "target": 25
+        },
+        {
+          "type": "contained",
+          "target": 26
+        }
+      ]
+    },
+    {
+      "id": 25,
+      "title": "Path clearance",
+      "description": "The path planner shall maintain at least 0.15 m clearance from mapped static obstacles.",
+      "rationale": "Clearance accounts for localization and vehicle footprint uncertainty.",
+      "variant": 101,
+      "relations": [
+        {
+          "type": "derived",
+          "target": 27
+        },
+        {
+          "type": "related",
+          "target": 26
+        }
+      ]
+    },
+    {
+      "id": 26,
+      "title": "Aisle passing policy",
+      "description": "The path planner shall not schedule two robots to pass in a single-width aisle at the same time.",
+      "rationale": "Aisle reservation avoids deadlock and close-proximity encounters.",
+      "variant": 103,
+      "relations": []
+    },
+    {
+      "id": 27,
+      "title": "Route cost selection",
+      "description": "The path planner shall select among feasible routes using distance, congestion, and battery reserve.",
+      "rationale": "A balanced cost function supports efficient and robust missions.",
+      "variant": 103,
+      "relations": [
+        {
+          "type": "related",
+          "target": 23
+        }
+      ]
+    },
+    {
+      "id": 28,
+      "title": "Safety operating envelope",
+      "description": "The robot shall prevent commanded motion outside its validated speed, payload, and environmental limits.",
+      "rationale": "Operating limits bound hazards during normal operation.",
+      "variant": 101,
+      "relations": [
+        {
+          "type": "derived",
+          "target": 30
+        },
+        {
+          "type": "contained",
+          "target": 29
+        },
+        {
+          "type": "related",
+          "target": 34
+        }
+      ]
+    },
+    {
+      "id": 29,
+      "title": "Protective stop",
+      "description": "The safety controller shall stop motion when a person is detected inside the configured protective field.",
+      "rationale": "Protective stopping reduces the risk of person-robot contact.",
+      "variant": 101,
+      "relations": [
+        {
+          "type": "derived",
+          "target": 32
+        }
+      ]
+    },
+    {
+      "id": 30,
+      "title": "Safety controller independence",
+      "description": "The safety controller shall be able to remove drive torque without relying on the mission-planning software.",
+      "rationale": "Independent stopping prevents a software planning fault from defeating protection.",
+      "variant": 101,
+      "relations": [
+        {
+          "type": "derived",
+          "target": 31
+        },
+        {
+          "type": "contained",
+          "target": 32
+        },
+        {
+          "type": "contained",
+          "target": 34
+        }
+      ]
+    },
+    {
+      "id": 31,
+      "title": "Protective field selection",
+      "description": "The safety controller shall select a protective field appropriate to the current commanded speed.",
+      "rationale": "Speed-dependent fields provide protection while avoiding unnecessary stops.",
+      "variant": 103,
+      "relations": [
+        {
+          "type": "derived",
+          "target": 34
+        },
+        {
+          "type": "related",
+          "target": 33
+        }
+      ]
+    },
+    {
+      "id": 32,
+      "title": "Safety input monitoring",
+      "description": "The safety controller shall detect an open circuit or short circuit on each safety-rated input.",
+      "rationale": "Input diagnostics help detect faults that could impair protective functions.",
+      "variant": 101,
+      "relations": []
+    },
+    {
+      "id": 33,
+      "title": "Safety function test",
+      "description": "At startup, the robot shall verify that safety-rated inputs and the drive stop path respond within their specified test limits.",
+      "rationale": "Startup checks identify safety function failures before operation.",
+      "variant": 101,
+      "relations": []
+    },
+    {
+      "id": 34,
+      "title": "Safety fault latching",
+      "description": "A safety fault shall remain latched until the fault is cleared and an authorized reset is performed.",
+      "rationale": "Latching prevents automatic restart after a safety event.",
+      "variant": 101,
+      "relations": []
+    },
+    {
+      "id": 35,
+      "title": "Emergency stop response",
+      "description": "Pressing any emergency stop device shall remove drive torque and activate the audible and visual alarms.",
+      "rationale": "An immediate, recognizable response is essential in an emergency.",
+      "variant": 101,
+      "relations": [
+        {
+          "type": "derived",
+          "target": 36
+        },
+        {
+          "type": "contained",
+          "target": 37
+        }
+      ]
+    },
+    {
+      "id": 36,
+      "title": "Emergency stop reset",
+      "description": "Resetting an emergency stop device shall not restart motion without a separate start command.",
+      "rationale": "A deliberate restart prevents unexpected movement.",
+      "variant": 101,
+      "relations": [
+        {
+          "type": "derived",
+          "target": 37
+        }
+      ]
+    },
+    {
+      "id": 37,
+      "title": "Emergency event record",
+      "description": "The robot shall record the time, active mission, and safety state when an emergency stop is activated.",
+      "rationale": "Event context supports investigation and corrective action.",
+      "variant": 101,
+      "relations": []
+    },
+    {
+      "id": 38,
+      "title": "Energy reserve",
+      "description": "The robot shall reserve enough battery energy to reach a designated charging station before starting a mission.",
+      "rationale": "A reserve prevents the robot from stopping in an unsafe or obstructive location.",
+      "variant": 101,
+      "relations": [
+        {
+          "type": "derived",
+          "target": 40
+        },
+        {
+          "type": "contained",
+          "target": 39
+        }
+      ]
+    },
+    {
+      "id": 39,
+      "title": "Charging station interface",
+      "description": "The robot shall detect correct alignment and charging status at a compatible charging station.",
+      "rationale": "Verified alignment prevents failed or interrupted charging.",
+      "variant": 101,
+      "relations": [
+        {
+          "type": "derived",
+          "target": 41
+        },
+        {
+          "type": "contained",
+          "target": 40
+        }
+      ]
+    },
+    {
+      "id": 40,
+      "title": "Battery state estimate",
+      "description": "The battery manager shall publish state of charge with an estimated error below 5 percent over the validated temperature range.",
+      "rationale": "Reliable state of charge supports mission planning and charging decisions.",
+      "variant": 102,
+      "relations": [
+        {
+          "type": "derived",
+          "target": 42
+        },
+        {
+          "type": "contained",
+          "target": 43
+        }
+      ]
+    },
+    {
+      "id": 41,
+      "title": "Battery temperature protection",
+      "description": "The battery manager shall inhibit charging outside the battery supplier temperature limits.",
+      "rationale": "Temperature limits protect battery life and reduce thermal hazards.",
+      "variant": 102,
+      "relations": [
+        {
+          "type": "derived",
+          "target": 43
+        }
+      ]
+    },
+    {
+      "id": 42,
+      "title": "Battery health reporting",
+      "description": "The battery manager shall report state of health and the number of completed charge cycles.",
+      "rationale": "Health reporting supports maintenance and capacity planning.",
+      "variant": 101,
+      "relations": []
+    },
+    {
+      "id": 43,
+      "title": "Low energy recovery",
+      "description": "When energy reserve falls below the configured threshold, the robot shall finish or safely suspend its current task and navigate to charging.",
+      "rationale": "A defined recovery policy avoids unexpected power loss.",
+      "variant": 101,
+      "relations": []
+    },
+    {
+      "id": 44,
+      "title": "Fleet communication",
+      "description": "The robot shall exchange mission, status, and fault messages with the fleet manager over the approved wireless network.",
+      "rationale": "Reliable fleet communication enables coordinated operations.",
+      "variant": 101,
+      "relations": [
+        {
+          "type": "derived",
+          "target": 45
+        },
+        {
+          "type": "contained",
+          "target": 46
+        }
+      ]
+    },
+    {
+      "id": 45,
+      "title": "Communication loss response",
+      "description": "If fleet communication is lost for more than 3 seconds, the robot shall enter the configured communication-loss behavior.",
+      "rationale": "A bounded response prevents unsafe continuation with stale instructions.",
+      "variant": 101,
+      "relations": [
+        {
+          "type": "derived",
+          "target": 46
+        },
+        {
+          "type": "contained",
+          "target": 47
+        }
+      ]
+    },
+    {
+      "id": 46,
+      "title": "Command authentication",
+      "description": "The robot shall authenticate fleet-manager commands before accepting mission or configuration changes.",
+      "rationale": "Authentication prevents unauthorized control of the robot.",
+      "variant": 101,
+      "relations": [
+        {
+          "type": "derived",
+          "target": 47
+        },
+        {
+          "type": "related",
+          "target": 48
+        }
+      ]
+    },
+    {
+      "id": 47,
+      "title": "Command freshness",
+      "description": "The robot shall reject control commands older than the configured command-validity interval.",
+      "rationale": "Freshness checks prevent delayed commands from changing current behavior.",
+      "variant": 101,
+      "relations": [
+        {
+          "type": "derived",
+          "target": 48
+        }
+      ]
+    },
+    {
+      "id": 48,
+      "title": "Communication recovery",
+      "description": "After a network interruption, the robot shall reconcile mission state with the fleet manager before accepting new work.",
+      "rationale": "State reconciliation prevents duplicate or conflicting missions.",
+      "variant": 101,
+      "relations": []
+    }
+  ],
+  "comments": [
+    {
+      "id": 900,
+      "title": "Cold-storage battery limits",
+      "comment": "Validate the cold-storage temperature envelope with the battery supplier.",
+      "relations": [
+        {
+          "type": "related",
+          "target": 41
+        }
+      ]
+    },
+    {
+      "id": 901,
+      "title": "Pose confidence threshold",
+      "comment": "Confirm the pose confidence threshold against the production sensor set.",
+      "relations": [
+        {
+          "type": "related",
+          "target": 21
+        }
+      ]
+    },
+    {
+      "id": 902,
+      "title": "Protective field commissioning",
+      "comment": "Safety field dimensions require approval during site commissioning.",
+      "relations": [
+        {
+          "type": "related",
+          "target": 33
+        }
+      ]
+    }
+  ],
+  "variants": [
+    {
+      "id": 101,
+      "parent": 0,
+      "name": "All sites",
+      "description": "Shared requirements for every deployment."
+    },
+    {
+      "id": 102,
+      "parent": 101,
+      "name": "Cold storage",
+      "description": "Deployments operating in refrigerated warehouse areas."
+    },
+    {
+      "id": 103,
+      "parent": 101,
+      "name": "High throughput",
+      "description": "Deployments optimized for high mission volume."
+    }
+  ]
+}

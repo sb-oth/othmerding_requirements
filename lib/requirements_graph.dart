@@ -4,6 +4,258 @@ import 'package:flutter/material.dart';
 
 import 'models.dart';
 
+typedef GraphNodeId = ({bool isComment, int id});
+
+class GraphConnection {
+  const GraphConnection({
+    required this.source,
+    required this.target,
+    required this.type,
+  });
+
+  final GraphNodeId source;
+  final GraphNodeId target;
+  final RequirementRelationType type;
+}
+
+class GraphConnectionRoute {
+  const GraphConnectionRoute({required this.connection, required this.points});
+
+  final GraphConnection connection;
+  final List<Offset> points;
+}
+
+class GraphLayout {
+  const GraphLayout({
+    required this.nodes,
+    required this.routes,
+    required this.size,
+  });
+
+  final Map<GraphNodeId, Rect> nodes;
+  final List<GraphConnectionRoute> routes;
+  final Size size;
+}
+
+GraphLayout layoutGraph({
+  required List<GraphNodeId> nodeIds,
+  required List<GraphConnection> connections,
+  GraphNodeId? selected,
+}) {
+  const nodeWidth = 208.0;
+  const minNodeHeight = 72.0;
+  const margin = 24.0;
+  const laneSpacing = 12.0;
+  const portSpacing = 12.0;
+  final visibleNodes = nodeIds.toSet();
+  final visibleConnections = connections
+      .where(
+        (edge) =>
+            visibleNodes.contains(edge.source) &&
+            visibleNodes.contains(edge.target),
+      )
+      .toList();
+  final columns = List.generate(3, (_) => <GraphNodeId>[]);
+  if (selected != null && visibleNodes.contains(selected)) {
+    columns[1].add(selected);
+    final incoming = visibleConnections
+        .where((edge) => edge.target == selected && edge.source != selected)
+        .map((edge) => edge.source)
+        .toSet();
+    final outgoing = visibleConnections
+        .where((edge) => edge.source == selected && edge.target != selected)
+        .map((edge) => edge.target)
+        .toSet();
+    for (final id in visibleNodes) {
+      if (id == selected) continue;
+      if (incoming.contains(id)) {
+        columns[0].add(id);
+      } else if (outgoing.contains(id)) {
+        columns[2].add(id);
+      } else {
+        columns[columns[0].length <= columns[2].length ? 0 : 2].add(id);
+      }
+    }
+  } else {
+    for (final (index, id) in visibleNodes.indexed) {
+      columns[index % 3].add(id);
+    }
+    selected = null;
+  }
+
+  final rowCount = math.max(
+    1,
+    columns.map((column) => column.length).reduce(math.max),
+  );
+  final rowOf = <GraphNodeId, int>{};
+  final columnOf = <GraphNodeId, int>{};
+  for (var column = 0; column < columns.length; column++) {
+    final items = columns[column];
+    for (var i = 0; i < items.length; i++) {
+      final row = items[i] == selected ? rowCount ~/ 2 : i;
+      rowOf[items[i]] = row;
+      columnOf[items[i]] = column;
+    }
+  }
+
+  final rowPorts = List<int>.filled(rowCount, 0);
+  final rowCrossings = List<int>.filled(rowCount, 0);
+  final gapCounts = [0, 0];
+  final edgeGaps = <(int, int?)>[];
+  for (final edge in visibleConnections) {
+    final sourceColumn = columnOf[edge.source]!;
+    final targetColumn = columnOf[edge.target]!;
+    final sourceRow = rowOf[edge.source]!;
+    final targetRow = rowOf[edge.target]!;
+    rowPorts[sourceRow] += 1;
+    if (sourceRow != targetRow || edge.source == edge.target) {
+      rowPorts[targetRow] += 1;
+    }
+    if ((sourceColumn - targetColumn).abs() == 2) {
+      edgeGaps.add(sourceColumn == 0 ? (0, 1) : (1, 0));
+      gapCounts[0]++;
+      gapCounts[1]++;
+      rowCrossings[sourceRow]++;
+    } else {
+      final gap = sourceColumn == targetColumn
+          ? (sourceColumn == 0
+                ? 0
+                : sourceColumn == 2
+                ? 1
+                : (gapCounts[0] <= gapCounts[1] ? 0 : 1))
+          : math.min(sourceColumn, targetColumn);
+      edgeGaps.add((gap, null));
+      if (sourceRow != targetRow || edge.source == edge.target) {
+        gapCounts[gap]++;
+      }
+    }
+  }
+  final columnGap = math.max(
+    48.0,
+    margin + math.max(gapCounts[0], gapCounts[1]) * laneSpacing,
+  );
+  final contentWidth = 3 * nodeWidth + 2 * columnGap;
+  final width = math.max(850.0, contentWidth + 2 * margin);
+  final contentLeft = (width - contentWidth) / 2;
+
+  final nodes = <GraphNodeId, Rect>{};
+  final rowTops = <double>[];
+  final rowHeights = <double>[];
+  final rowBottoms = <double>[];
+  var y = margin;
+  for (var row = 0; row < rowCount; row++) {
+    final nodeHeight = math.max(
+      minNodeHeight,
+      margin + rowPorts[row] * portSpacing,
+    );
+    rowTops.add(y);
+    rowHeights.add(nodeHeight);
+    for (var column = 0; column < columns.length; column++) {
+      for (final id in columns[column].where((id) => rowOf[id] == row)) {
+        nodes[id] = Rect.fromLTWH(
+          contentLeft + column * (nodeWidth + columnGap),
+          y,
+          nodeWidth,
+          nodeHeight,
+        );
+      }
+    }
+    rowBottoms.add(y + nodeHeight);
+    y += nodeHeight + margin + rowCrossings[row] * laneSpacing;
+  }
+
+  var height = math.max(420.0, y + margin);
+  if (selected != null) {
+    final selectedY = nodes[selected]!.center.dy;
+    final extraTop = math.max(0.0, height - 2 * selectedY);
+    final extraBottom = math.max(0.0, 2 * selectedY - height);
+    if (extraTop > 0) {
+      nodes.updateAll((_, rect) => rect.shift(Offset(0, extraTop)));
+      for (var i = 0; i < rowBottoms.length; i++) {
+        rowTops[i] += extraTop;
+        rowBottoms[i] += extraTop;
+      }
+    }
+    height += extraTop + extraBottom;
+  }
+
+  final usedRowPorts = List<int>.filled(rowCount, 0);
+  final usedRowLanes = List<int>.filled(rowCount, 0);
+  final edgePortHeights = <(int, int), double>{};
+  Offset nextPort(
+    GraphNodeId id,
+    int edgeIndex, {
+    required bool right,
+    required bool selfLoop,
+  }) {
+    final rect = nodes[id]!;
+    final row = rowOf[id]!;
+    double allocateHeight() =>
+        rowTops[row] +
+        rowHeights[row] / 2 -
+        (rowPorts[row] - 1) * portSpacing / 2 +
+        usedRowPorts[row]++ * portSpacing;
+    final portY = selfLoop
+        ? allocateHeight()
+        : edgePortHeights.putIfAbsent((edgeIndex, row), allocateHeight);
+    return Offset(right ? rect.right : rect.left, portY);
+  }
+
+  final usedGapLanes = [0, 0];
+  double nextGapLane(int gap) {
+    final left = contentLeft + (gap + 1) * nodeWidth + gap * columnGap;
+    return left + columnGap * (++usedGapLanes[gap]) / (gapCounts[gap] + 1);
+  }
+
+  // Distinct port heights and gap lanes keep parallel segments separate.
+  final routes = <GraphConnectionRoute>[];
+  for (var index = 0; index < visibleConnections.length; index++) {
+    final edge = visibleConnections[index];
+    final (sourceGap, targetGap) = edgeGaps[index];
+    final sourceColumn = columnOf[edge.source]!;
+    final targetColumn = columnOf[edge.target]!;
+    final selfLoop = edge.source == edge.target;
+    final start = nextPort(
+      edge.source,
+      index,
+      right: sourceGap == sourceColumn,
+      selfLoop: selfLoop,
+    );
+    final end = nextPort(
+      edge.target,
+      index,
+      right: (targetGap ?? sourceGap) == targetColumn,
+      selfLoop: selfLoop,
+    );
+    final points = <Offset>[start];
+    if (targetGap == null && start.dy == end.dy) {
+      points.add(end);
+    } else if (targetGap != null) {
+      final sourceLane = nextGapLane(sourceGap);
+      final row = rowOf[edge.source]!;
+      final crossLane =
+          rowBottoms[row] + 12 + usedRowLanes[row]++ * laneSpacing;
+      final targetLane = nextGapLane(targetGap);
+      points.addAll([
+        Offset(sourceLane, start.dy),
+        Offset(sourceLane, crossLane),
+        Offset(targetLane, crossLane),
+        Offset(targetLane, end.dy),
+        end,
+      ]);
+    } else {
+      final sourceLane = nextGapLane(sourceGap);
+      points.addAll([
+        Offset(sourceLane, start.dy),
+        Offset(sourceLane, end.dy),
+        end,
+      ]);
+    }
+    routes.add(GraphConnectionRoute(connection: edge, points: points));
+  }
+  return GraphLayout(nodes: nodes, routes: routes, size: Size(width, height));
+}
+
 class RequirementsGraph extends StatefulWidget {
   const RequirementsGraph({
     super.key,
@@ -32,6 +284,7 @@ class RequirementsGraph extends StatefulWidget {
 
 class _RequirementsGraphState extends State<RequirementsGraph> {
   final TransformationController _controller = TransformationController();
+  (GraphNodeId?, Offset, Size)? _centerTarget;
 
   @override
   void dispose() {
@@ -55,93 +308,80 @@ class _RequirementsGraphState extends State<RequirementsGraph> {
         ),
       );
     }
-    final primary = widget.selectedId;
-    final incoming = primary == null ? <int>[] : _incomingIds(primary, ids);
-    final outgoing = primary == null
-        ? <int>[]
-        : widget.project
-              .requirement(primary)
-              .relations
-              .map((relation) => relation.targetId)
-              .where(ids.contains)
-              .toList();
-    final remainder = ids
-        .where(
-          (id) =>
-              id != primary && !incoming.contains(id) && !outgoing.contains(id),
-        )
-        .toList();
-    final graphWidth = math
-        .max(850, 240.0 * (incoming.length + outgoing.length + 2))
-        .toDouble();
-    final commentColumns = math.max(1, (graphWidth / 240).floor());
-    final commentRows = (commentIds.length / commentColumns).ceil();
-    final requirementHeight = math
-        .max(420, 130.0 * (remainder.length + 4))
-        .toDouble();
+    final layout = layoutGraph(
+      selected: widget.selectedId != null
+          ? (isComment: false, id: widget.selectedId!)
+          : widget.selectedCommentId != null
+          ? (isComment: true, id: widget.selectedCommentId!)
+          : null,
+      nodeIds: [
+        for (final id in ids) (isComment: false, id: id),
+        for (final id in commentIds) (isComment: true, id: id),
+      ],
+      connections: [
+        for (final requirement in widget.project.requirements)
+          for (final relation in requirement.relations)
+            GraphConnection(
+              source: (isComment: false, id: requirement.id),
+              target: (isComment: false, id: relation.targetId),
+              type: relation.type,
+            ),
+        for (final comment in widget.project.comments)
+          for (final targetId in comment.relatedRequirementIds)
+            GraphConnection(
+              source: (isComment: true, id: comment.id),
+              target: (isComment: false, id: targetId),
+              type: RequirementRelationType.related,
+            ),
+      ],
+    );
 
-    return InteractiveViewer(
-      transformationController: _controller,
-      minScale: 0.45,
-      maxScale: 2.5,
-      constrained: false,
-      boundaryMargin: const EdgeInsets.all(120),
-      child: SizedBox(
-        width: graphWidth,
-        height: requirementHeight + commentRows * 115,
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final positions = <int, Offset>{};
-            final commentPositions = <int, Offset>{};
-            final center = Offset(
-              constraints.maxWidth / 2,
-              requirementHeight / 2,
-            );
-            if (primary != null) positions[primary] = center;
-            for (var i = 0; i < incoming.length; i++) {
-              positions[incoming[i]] = Offset(
-                constraints.maxWidth * 0.18,
-                _verticalPosition(i, incoming.length, requirementHeight),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final selected = widget.selectedId != null
+            ? (isComment: false, id: widget.selectedId!)
+            : widget.selectedCommentId != null
+            ? (isComment: true, id: widget.selectedCommentId!)
+            : null;
+        final viewport = Size(constraints.maxWidth, constraints.maxHeight);
+        final target = (
+          selected,
+          layout.nodes[selected]?.center ?? layout.size.center(Offset.zero),
+          viewport,
+        );
+        if (_centerTarget != target) {
+          _centerTarget = target;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted || _centerTarget != target) return;
+            final scale = _controller.value.getMaxScaleOnAxis();
+            _controller.value = Matrix4.diagonal3Values(scale, scale, 1)
+              ..setTranslationRaw(
+                viewport.width / 2 - target.$2.dx * scale,
+                viewport.height / 2 - target.$2.dy * scale,
+                0,
               );
-            }
-            for (var i = 0; i < outgoing.length; i++) {
-              positions[outgoing[i]] = Offset(
-                constraints.maxWidth * 0.82,
-                _verticalPosition(i, outgoing.length, requirementHeight),
-              );
-            }
-            for (var i = 0; i < remainder.length; i++) {
-              positions[remainder[i]] = Offset(
-                constraints.maxWidth * (i.isEven ? 0.35 : 0.65),
-                70.0 + (i ~/ 2) * 120,
-              );
-            }
-            final actualCommentColumns = math.max(
-              1,
-              (constraints.maxWidth / 240).floor(),
-            );
-            for (var i = 0; i < commentIds.length; i++) {
-              commentPositions[commentIds[i]] = Offset(
-                120 + (i % actualCommentColumns) * 240,
-                requirementHeight + 50 + (i ~/ actualCommentColumns) * 115,
-              );
-            }
-            return Stack(
+          });
+        }
+        return InteractiveViewer(
+          transformationController: _controller,
+          minScale: 0.45,
+          maxScale: 2.5,
+          constrained: false,
+          boundaryMargin: const EdgeInsets.all(120),
+          child: SizedBox(
+            width: layout.size.width,
+            height: layout.size.height,
+            child: Stack(
               children: [
                 Positioned.fill(
                   child: CustomPaint(
-                    painter: _GraphConnectionsPainter(
-                      project: widget.project,
-                      positions: positions,
-                      commentPositions: commentPositions,
-                    ),
+                    painter: _GraphConnectionsPainter(routes: layout.routes),
                   ),
                 ),
                 for (final id in ids)
-                  if (positions[id] case final position?)
-                    Positioned(
-                      left: position.dx - 108,
-                      top: position.dy - 43,
+                  if (layout.nodes[(isComment: false, id: id)] case final rect?)
+                    Positioned.fromRect(
+                      rect: rect,
                       child: _RequirementNode(
                         requirement: widget.project.requirement(id),
                         selected: widget.selectedId == id,
@@ -150,10 +390,9 @@ class _RequirementsGraphState extends State<RequirementsGraph> {
                       ),
                     ),
                 for (final id in commentIds)
-                  if (commentPositions[id] case final position?)
-                    Positioned(
-                      left: position.dx - 108,
-                      top: position.dy - 43,
+                  if (layout.nodes[(isComment: true, id: id)] case final rect?)
+                    Positioned.fromRect(
+                      rect: rect,
                       child: _CommentNode(
                         comment: widget.project.comments.firstWhere(
                           (comment) => comment.id == id,
@@ -163,25 +402,11 @@ class _RequirementsGraphState extends State<RequirementsGraph> {
                       ),
                     ),
               ],
-            );
-          },
-        ),
-      ),
+            ),
+          ),
+        );
+      },
     );
-  }
-
-  List<int> _incomingIds(int selectedId, List<int> ids) => ids
-      .where(
-        (id) => widget.project
-            .requirement(id)
-            .relations
-            .any((relation) => relation.targetId == selectedId),
-      )
-      .toList();
-
-  double _verticalPosition(int index, int count, double height) {
-    if (count == 1) return height / 2;
-    return 85 + index * ((height - 170) / (count - 1));
   }
 }
 
@@ -323,15 +548,9 @@ class _RequirementNode extends StatelessWidget {
 }
 
 class _GraphConnectionsPainter extends CustomPainter {
-  _GraphConnectionsPainter({
-    required this.project,
-    required this.positions,
-    required this.commentPositions,
-  });
+  _GraphConnectionsPainter({required this.routes});
 
-  final RequirementProject project;
-  final Map<int, Offset> positions;
-  final Map<int, Offset> commentPositions;
+  final List<GraphConnectionRoute> routes;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -342,61 +561,57 @@ class _GraphConnectionsPainter extends CustomPainter {
     final arrowPaint = Paint()
       ..color = const Color(0xFF748091)
       ..style = PaintingStyle.fill;
-    for (final requirement in project.requirements) {
-      final start = positions[requirement.id];
-      if (start == null) continue;
-      for (final relation in requirement.relations) {
-        final targetId = relation.targetId;
-        final end = positions[targetId];
-        if (end == null) continue;
-        final direction = end.dx >= start.dx ? 1.0 : -1.0;
-        final startPoint = Offset(start.dx + direction * 108, start.dy);
-        final endPoint = Offset(end.dx - direction * 108, end.dy);
-        final midX = (startPoint.dx + endPoint.dx) / 2;
-        final path = Path()
-          ..moveTo(startPoint.dx, startPoint.dy)
-          ..lineTo(midX, startPoint.dy)
-          ..lineTo(midX, endPoint.dy)
-          ..lineTo(endPoint.dx, endPoint.dy);
-        switch (relation.type) {
-          case RequirementRelationType.derived:
-            canvas.drawPath(path, linePaint);
-            canvas.drawPath(
-              Path()
-                ..moveTo(endPoint.dx, endPoint.dy)
-                ..lineTo(endPoint.dx - direction * 8, endPoint.dy - 5)
-                ..lineTo(endPoint.dx - direction * 8, endPoint.dy + 5)
-                ..close(),
-              arrowPaint,
-            );
-          case RequirementRelationType.related:
-            _drawDottedPath(canvas, path, linePaint.color);
-          case RequirementRelationType.contained:
-            canvas.drawPath(path, linePaint);
-            canvas.drawPath(
-              Path()
-                ..moveTo(endPoint.dx, endPoint.dy)
-                ..lineTo(endPoint.dx - direction * 5, endPoint.dy - 5)
-                ..lineTo(endPoint.dx - direction * 10, endPoint.dy)
-                ..lineTo(endPoint.dx - direction * 5, endPoint.dy + 5)
-                ..close(),
-              arrowPaint,
-            );
-        }
+    for (final route in routes) {
+      final path = Path()..moveTo(route.points.first.dx, route.points.first.dy);
+      for (final point in route.points.skip(1)) {
+        path.lineTo(point.dx, point.dy);
+      }
+      switch (route.connection.type) {
+        case RequirementRelationType.derived:
+          canvas.drawPath(path, linePaint);
+          _drawArrowhead(canvas, route.points, arrowPaint, diamond: false);
+        case RequirementRelationType.related:
+          _drawDottedPath(canvas, path, linePaint.color);
+        case RequirementRelationType.contained:
+          canvas.drawPath(path, linePaint);
+          _drawArrowhead(canvas, route.points, arrowPaint, diamond: true);
       }
     }
-    for (final comment in project.comments) {
-      final start = commentPositions[comment.id];
-      if (start == null) continue;
-      for (final targetId in comment.relatedRequirementIds) {
-        final end = positions[targetId];
-        if (end == null) continue;
-        final path = Path()
-          ..moveTo(start.dx, start.dy)
-          ..lineTo(end.dx, end.dy);
-        _drawDottedPath(canvas, path, linePaint.color);
-      }
+  }
+
+  void _drawArrowhead(
+    Canvas canvas,
+    List<Offset> points,
+    Paint paint, {
+    required bool diamond,
+  }) {
+    final end = points.last;
+    final previous = points[points.length - 2];
+    final direction = (end - previous) / (end - previous).distance;
+    final perpendicular = Offset(-direction.dy, direction.dx);
+    final path = Path()..moveTo(end.dx, end.dy);
+    if (diamond) {
+      final middle = end - direction * 5;
+      final back = end - direction * 10;
+      path
+        ..lineTo(
+          middle.dx + perpendicular.dx * 5,
+          middle.dy + perpendicular.dy * 5,
+        )
+        ..lineTo(back.dx, back.dy)
+        ..lineTo(
+          middle.dx - perpendicular.dx * 5,
+          middle.dy - perpendicular.dy * 5,
+        )
+        ..close();
+    } else {
+      final back = end - direction * 8;
+      path
+        ..lineTo(back.dx + perpendicular.dx * 5, back.dy + perpendicular.dy * 5)
+        ..lineTo(back.dx - perpendicular.dx * 5, back.dy - perpendicular.dy * 5)
+        ..close();
     }
+    canvas.drawPath(path, paint);
   }
 
   void _drawDottedPath(Canvas canvas, Path path, Color color) {
@@ -411,7 +626,5 @@ class _GraphConnectionsPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _GraphConnectionsPainter oldDelegate) =>
-      oldDelegate.positions != positions ||
-      oldDelegate.commentPositions != commentPositions ||
-      oldDelegate.project != project;
+      oldDelegate.routes != routes;
 }
