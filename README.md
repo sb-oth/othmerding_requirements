@@ -7,6 +7,8 @@ comments, relationships, and hierarchical variants.
 
 - Create a project in a location selected with the Windows Save dialog
 - VS Code-style explorer with folders, requirements, and comments
+- Hover over a folder to rename it or delete it if empty; drag folders or
+  requirements onto another folder to move them
 - Search by ID, variant (`version:`), or free text
 - Orthogonal relationship graph with separate ports and routing lanes for
   Derived, Related, and Contained links (lines may cross but do not overlap)
@@ -28,6 +30,10 @@ flutter run -d windows
 
 On first launch, open an existing project or create one. The application
 remembers the last opened project and restores it on subsequent launches.
+Press **Ctrl+S** or choose **File > Save Project** to save all project,
+requirement, and comment changes. The requirement Save button remains scoped to
+that requirement. The project root cannot be moved or deleted, and folders
+cannot be moved into themselves or their descendants.
 
 ## Example project
 

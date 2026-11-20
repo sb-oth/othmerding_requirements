@@ -106,6 +106,9 @@ class RequirementFolder {
   List<int> commentIds;
   List<int> childFolderIds;
 
+  bool get isEmpty =>
+      requirementIds.isEmpty && commentIds.isEmpty && childFolderIds.isEmpty;
+
   Map<String, Object?> toJson() => {
     'id': id,
     'name': name,
@@ -280,6 +283,67 @@ class RequirementProject {
     folders.add(child);
     folder(parentId).childFolderIds.add(child.id);
     return child;
+  }
+
+  bool canMoveFolder(int folderId, int destinationId) {
+    final source = folder(folderId);
+    final destination = folder(destinationId);
+    return source.parentId != null &&
+        source.parentId != destination.id &&
+        source.id != destination.id &&
+        !ancestorsOfFolder(destination.id).contains(source.id);
+  }
+
+  void moveFolder(int folderId, int destinationId) {
+    if (!canMoveFolder(folderId, destinationId)) {
+      throw StateError('Cannot move this folder to the selected destination.');
+    }
+    final source = folder(folderId);
+    final oldParent = folder(source.parentId!);
+    final destination = folder(destinationId);
+    if (!oldParent.childFolderIds.contains(folderId)) {
+      throw StateError('The folder is missing from its parent.');
+    }
+    oldParent.childFolderIds.remove(folderId);
+    destination.childFolderIds.add(folderId);
+    source.parentId = destinationId;
+  }
+
+  bool canMoveRequirement(int requirementId, int destinationId) {
+    requirement(requirementId);
+    final destination = folder(destinationId);
+    final source = containingFolder(requirementId);
+    if (source == null) {
+      throw StateError('The requirement is not in a folder.');
+    }
+    return source.id != destination.id;
+  }
+
+  void moveRequirement(int requirementId, int destinationId) {
+    if (!canMoveRequirement(requirementId, destinationId)) {
+      throw StateError('The requirement is already in this folder.');
+    }
+    final source = containingFolder(requirementId)!;
+    final destination = folder(destinationId);
+    source.requirementIds.remove(requirementId);
+    destination.requirementIds.add(requirementId);
+  }
+
+  void deleteFolder(int folderId) {
+    final target = folder(folderId);
+    final parentId = target.parentId;
+    if (parentId == null) {
+      throw StateError('The project root folder cannot be deleted.');
+    }
+    if (!target.isEmpty) {
+      throw StateError('Only empty folders can be deleted.');
+    }
+    final parent = folder(parentId);
+    if (!parent.childFolderIds.contains(folderId)) {
+      throw StateError('The folder is missing from its parent.');
+    }
+    parent.childFolderIds.remove(folderId);
+    folders.remove(target);
   }
 
   RequirementComment createComment(

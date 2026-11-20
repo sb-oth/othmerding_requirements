@@ -27,6 +27,101 @@ void main() {
       expect(project.folder(1).commentIds, [comment.id]);
     });
 
+    test(
+      'moves requirements between folders without changing their content',
+      () {
+        final project = RequirementProject.empty(name: 'Moves');
+        final source = project.createFolder(1);
+        final target = project.createFolder(1);
+        final requirement = project.createRequirement(source.id)
+          ..title = 'Moved';
+        final comment = project.createComment(source.id, requirement.id);
+
+        expect(project.canMoveRequirement(requirement.id, source.id), isFalse);
+        expect(
+          () => project.moveRequirement(requirement.id, source.id),
+          throwsStateError,
+        );
+        project.moveRequirement(requirement.id, target.id);
+        expect(source.requirementIds, isEmpty);
+        expect(target.requirementIds, [requirement.id]);
+        expect(project.containingFolder(requirement.id), target);
+        expect(project.requirement(requirement.id).title, 'Moved');
+        expect(comment.relatedRequirementIds, [requirement.id]);
+        final restored = RequirementProject.fromJson(
+          jsonDecode(project.toPrettyJson()) as Map<String, Object?>,
+        );
+        expect(restored.folder(target.id).requirementIds, [requirement.id]);
+      },
+    );
+
+    test(
+      'moves folder trees and rejects root, same-parent and cyclic moves',
+      () {
+        final project = RequirementProject.empty(name: 'Folders');
+        final source = project.createFolder(1);
+        final child = project.createFolder(source.id);
+        final destination = project.createFolder(1);
+        final requirement = project.createRequirement(child.id);
+
+        for (final (folderId, destinationId) in [
+          (1, destination.id),
+          (source.id, 1),
+          (source.id, source.id),
+          (source.id, child.id),
+        ]) {
+          expect(project.canMoveFolder(folderId, destinationId), isFalse);
+          expect(
+            () => project.moveFolder(folderId, destinationId),
+            throwsStateError,
+          );
+        }
+        project.moveFolder(source.id, destination.id);
+        expect(project.folder(1).childFolderIds, [destination.id]);
+        expect(destination.childFolderIds, [source.id]);
+        expect(source.parentId, destination.id);
+        expect(child.parentId, source.id);
+        expect(child.requirementIds, [requirement.id]);
+        expect(project.ancestorsOfFolder(child.id), [
+          source.id,
+          destination.id,
+          1,
+        ]);
+        final restored = RequirementProject.fromJson(
+          jsonDecode(project.toPrettyJson()) as Map<String, Object?>,
+        );
+        expect(restored.folder(source.id).parentId, destination.id);
+        expect(restored.folder(destination.id).childFolderIds, [source.id]);
+      },
+    );
+
+    test('only deletes empty non-root folders', () {
+      final project = RequirementProject.empty(name: 'Folders');
+      final requirementFolder = project.createFolder(1);
+      final commentFolder = project.createFolder(1);
+      final parentFolder = project.createFolder(1);
+      final empty = project.createFolder(parentFolder.id);
+      final requirement = project.createRequirement(requirementFolder.id);
+      project.createComment(commentFolder.id, requirement.id);
+
+      for (final id in [
+        1,
+        requirementFolder.id,
+        commentFolder.id,
+        parentFolder.id,
+      ]) {
+        expect(() => project.deleteFolder(id), throwsStateError);
+      }
+      project.deleteFolder(empty.id);
+      expect(parentFolder.childFolderIds, isEmpty);
+      expect(project.folders.any((folder) => folder.id == empty.id), isFalse);
+      project.deleteFolder(parentFolder.id);
+      expect(
+        project.folder(1).childFolderIds,
+        isNot(contains(parentFolder.id)),
+      );
+    });
+
     test('round trips the complete JSON database', () {
       final project = RequirementProject.sample();
 

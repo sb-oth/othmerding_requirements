@@ -1,8 +1,8 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'models.dart';
@@ -26,6 +26,18 @@ class _RequirementRelationEntry {
   final Requirement requirement;
   final RequirementRelation relation;
 }
+
+typedef _ExplorerDrag = ({RequirementProject project, bool isFolder, int id});
+
+class _SaveProjectIntent extends Intent {
+  const _SaveProjectIntent();
+}
+
+const _saveProjectShortcut = SingleActivator(
+  LogicalKeyboardKey.keyS,
+  control: true,
+  includeRepeats: false,
+);
 
 class RequirementsApp extends StatelessWidget {
   const RequirementsApp({super.key, this.lastProjectStore});
@@ -163,21 +175,58 @@ class _WorkspaceState extends State<_Workspace> {
   Future<void> _saveProject() async {
     final repository = _repository;
     if (_saving || repository == null) return;
+    final project = _data;
     setState(() => _saving = true);
     try {
-      await repository.save(_data);
+      final savedProject = RequirementProject.fromJson(project.toJson());
+      await repository.save(savedProject);
+      if (!mounted ||
+          !identical(_project, project) ||
+          !identical(_repository, repository)) {
+        return;
+      }
       final rememberError = await _rememberProjectPath(repository.path);
-      if (!mounted) return;
+      if (!mounted ||
+          !identical(_project, project) ||
+          !identical(_repository, repository)) {
+        return;
+      }
+      final savedRequirements = {
+        for (final item in savedProject.requirements) item.id: item,
+      };
+      final currentRequirements = {
+        for (final item in project.requirements) item.id: item,
+      };
+      final savedComments = {
+        for (final item in savedProject.comments) item.id: item,
+      };
+      final currentComments = {
+        for (final item in project.comments) item.id: item,
+      };
       setState(() {
-        _dirtyRequirements.clear();
-        _newRequirements.clear();
-        _dirtyComments.clear();
-        _newComments.clear();
-        _projectDirty = false;
+        _dirtyRequirements.removeWhere((id) {
+          final saved = savedRequirements[id];
+          final current = currentRequirements[id];
+          return saved != null &&
+              current != null &&
+              jsonEncode(saved.toJson()) == jsonEncode(current.toJson());
+        });
+        _newRequirements.removeWhere(savedRequirements.containsKey);
+        _dirtyComments.removeWhere((id) {
+          final saved = savedComments[id];
+          final current = currentComments[id];
+          return saved != null &&
+              current != null &&
+              jsonEncode(saved.toJson()) == jsonEncode(current.toJson());
+        });
+        _newComments.removeWhere(savedComments.containsKey);
+        if (_projectStructure(project) == _projectStructure(savedProject)) {
+          _projectDirty = false;
+        }
         _requirementBaselines
-          ..clear()
+          ..removeWhere((id, _) => !currentRequirements.containsKey(id))
           ..addEntries(
-            _data.requirements.map(
+            savedProject.requirements.map(
               (requirement) => MapEntry(requirement.id, requirement.copy()),
             ),
           );
@@ -195,6 +244,14 @@ class _WorkspaceState extends State<_Workspace> {
       if (mounted) setState(() => _saving = false);
     }
   }
+
+  String _projectStructure(RequirementProject project) => jsonEncode({
+    'name': project.name,
+    'nextRequirementNumber': project.nextRequirementNumber,
+    'nextEntityId': project.nextEntityId,
+    'folders': project.folders.map((folder) => folder.toJson()).toList(),
+    'variants': project.variants.map((variant) => variant.toJson()).toList(),
+  });
 
   Future<void> _saveRequirement() async {
     final repository = _repository;
@@ -555,6 +612,126 @@ class _WorkspaceState extends State<_Workspace> {
     });
   }
 
+  Future<void> _deleteFolder(int id) async {
+    if (_saving) return;
+    final project = _data;
+    final folder = project.folder(id);
+    if (folder.parentId == null) {
+      _showMessage('The project root folder cannot be deleted.', isError: true);
+      return;
+    }
+    if (!folder.isEmpty) {
+      _showMessage('Only empty folders can be deleted.', isError: true);
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete folder?'),
+        content: Text('Delete the empty folder "${folder.name}"?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || confirmed != true || !identical(_project, project)) return;
+    try {
+      final parentId = folder.parentId;
+      project.deleteFolder(id);
+      setState(() {
+        _expandedFolders.remove(id);
+        if (_selectedFolderId == id) _selectedFolderId = parentId;
+        _projectDirty = true;
+      });
+    } on StateError catch (error) {
+      _showMessage(error.message.toString(), isError: true);
+    }
+  }
+
+  bool _canDropOnFolder(_ExplorerDrag drag, int folderId) {
+    if (_saving || !identical(drag.project, _project)) return false;
+    if (drag.isFolder) {
+      if (!_data.folders.any((folder) => folder.id == drag.id)) return false;
+      return _data.canMoveFolder(drag.id, folderId);
+    }
+    if (!_data.requirements.any((item) => item.id == drag.id)) return false;
+    return _data.canMoveRequirement(drag.id, folderId);
+  }
+
+  void _moveToFolder(_ExplorerDrag drag, int folderId) {
+    if (!_canDropOnFolder(drag, folderId)) return;
+    try {
+      if (drag.isFolder) {
+        _data.moveFolder(drag.id, folderId);
+      } else {
+        _data.moveRequirement(drag.id, folderId);
+      }
+      setState(() {
+        if (!drag.isFolder && _selectedRequirementId == drag.id) {
+          _selectedFolderId = folderId;
+        }
+        _expandedFolders
+          ..add(folderId)
+          ..addAll(_data.ancestorsOfFolder(folderId));
+        if (_selectedFolderId case final selectedFolderId?) {
+          _expandedFolders.addAll(_data.ancestorsOfFolder(selectedFolderId));
+        }
+        _projectDirty = true;
+      });
+    } on StateError catch (error) {
+      _showMessage(error.message.toString(), isError: true);
+    }
+  }
+
+  Widget _draggableExplorerRow({
+    required _ExplorerDrag data,
+    required String label,
+    required IconData icon,
+    required Widget child,
+  }) {
+    return Draggable<_ExplorerDrag>(
+      key: ValueKey(
+        '${data.isFolder ? 'folder' : 'requirement'}-drag-${data.id}',
+      ),
+      data: data,
+      maxSimultaneousDrags: _saving ? 0 : 1,
+      dragAnchorStrategy: pointerDragAnchorStrategy,
+      feedback: Material(
+        elevation: 4,
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(4),
+        child: SizedBox(
+          width: 250,
+          child: Padding(
+            padding: const EdgeInsets.all(8),
+            child: Row(
+              children: [
+                Icon(icon, size: 17),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+      childWhenDragging: Opacity(opacity: 0.4, child: child),
+      child: child,
+    );
+  }
+
   Future<void> _renameFolder(int folderId) async {
     final folder = _data.folder(folderId);
     final controller = TextEditingController(text: folder.name)
@@ -829,39 +1006,55 @@ class _WorkspaceState extends State<_Workspace> {
         ),
       );
     }
-    return Scaffold(
-      body: Column(
-        children: [
-          _buildTitleBar(context),
-          Expanded(
-            child: Row(
+    return Shortcuts(
+      shortcuts: const {_saveProjectShortcut: _SaveProjectIntent()},
+      child: Actions(
+        actions: {
+          _SaveProjectIntent: CallbackAction<_SaveProjectIntent>(
+            onInvoke: (_) {
+              _saveProject();
+              return null;
+            },
+          ),
+        },
+        child: Focus(
+          autofocus: true,
+          child: Scaffold(
+            body: Column(
               children: [
-                SizedBox(width: 286, child: _buildExplorer(context)),
-                const VerticalDivider(width: 1),
+                _buildTitleBar(context),
                 Expanded(
-                  child: Column(
+                  child: Row(
                     children: [
+                      SizedBox(width: 286, child: _buildExplorer(context)),
+                      const VerticalDivider(width: 1),
                       Expanded(
-                        flex: 6,
-                        child: _variantsVisible
-                            ? _buildVariantTable(context)
-                            : RequirementsGraph(
-                                project: _data,
-                                requirementIds: _graphIds,
-                                commentIds: _graphCommentIds,
-                                selectedId: _selectedRequirementId,
-                                selectedCommentId: _selectedCommentId,
-                                highlightedId: _highlightedRequirementId,
-                                onSelect: _selectFromGraph,
-                                onSelectComment: _selectComment,
-                              ),
-                      ),
-                      const Divider(height: 1),
-                      SizedBox(
-                        height: 280,
-                        child: _selectedCommentId != null
-                            ? _buildCommentEditor(context)
-                            : _buildRequirementEditor(context),
+                        child: Column(
+                          children: [
+                            Expanded(
+                              flex: 6,
+                              child: _variantsVisible
+                                  ? _buildVariantTable(context)
+                                  : RequirementsGraph(
+                                      project: _data,
+                                      requirementIds: _graphIds,
+                                      commentIds: _graphCommentIds,
+                                      selectedId: _selectedRequirementId,
+                                      selectedCommentId: _selectedCommentId,
+                                      highlightedId: _highlightedRequirementId,
+                                      onSelect: _selectFromGraph,
+                                      onSelectComment: _selectComment,
+                                    ),
+                            ),
+                            const Divider(height: 1),
+                            SizedBox(
+                              height: 280,
+                              child: _selectedCommentId != null
+                                  ? _buildCommentEditor(context)
+                                  : _buildRequirementEditor(context),
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   ),
@@ -869,7 +1062,7 @@ class _WorkspaceState extends State<_Workspace> {
               ],
             ),
           ),
-        ],
+        ),
       ),
     );
   }
@@ -906,6 +1099,7 @@ class _WorkspaceState extends State<_Workspace> {
                 MenuItemButton(
                   style: _titleBarMenuItemStyle,
                   leadingIcon: const Icon(Icons.save_outlined),
+                  shortcut: _saveProjectShortcut,
                   onPressed: _saving ? null : _saveProject,
                   child: const Text('Save Project'),
                 ),
@@ -1085,38 +1279,89 @@ class _WorkspaceState extends State<_Workspace> {
         !folderMatches) {
       return const SizedBox.shrink();
     }
+    final folderRow = _ExplorerRow(
+      depth: depth,
+      selected:
+          _selectedFolderId == folderId &&
+          _selectedRequirementId == null &&
+          _selectedCommentId == null,
+      icon: expanded ? Icons.folder_open : Icons.folder_outlined,
+      label: folder.name,
+      onTap: () => _selectFolder(folderId),
+      onDoubleTap: () => _renameFolder(folderId),
+      hoverOnlyActions: true,
+      trailingActionWidth: 52,
+      trailingAction: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: 26,
+            child: IconButton(
+              tooltip: 'Rename folder',
+              icon: const Icon(Icons.edit_outlined, size: 16),
+              padding: EdgeInsets.zero,
+              visualDensity: VisualDensity.compact,
+              onPressed: () => _renameFolder(folderId),
+            ),
+          ),
+          SizedBox(
+            width: 26,
+            child: IconButton(
+              tooltip: 'Delete folder',
+              icon: const Icon(Icons.folder_delete_outlined, size: 16),
+              padding: EdgeInsets.zero,
+              visualDensity: VisualDensity.compact,
+              onPressed: _saving || folder.parentId == null
+                  ? null
+                  : () => _deleteFolder(folderId),
+            ),
+          ),
+        ],
+      ),
+      leadingAction: IconButton(
+        tooltip: expanded ? 'Collapse folder' : 'Expand folder',
+        icon: Icon(
+          expanded ? Icons.expand_more : Icons.chevron_right,
+          size: 16,
+        ),
+        visualDensity: VisualDensity.compact,
+        onPressed: () => setState(() {
+          if (expanded) {
+            _expandedFolders.remove(folderId);
+          } else {
+            _expandedFolders.add(folderId);
+          }
+        }),
+      ),
+    );
     return Column(
       children: [
-        _ExplorerRow(
-          depth: depth,
-          selected:
-              _selectedFolderId == folderId &&
-              _selectedRequirementId == null &&
-              _selectedCommentId == null,
-          icon: expanded ? Icons.folder_open : Icons.folder_outlined,
-          label: folder.name,
-          onTap: () => _selectFolder(folderId),
-          onDoubleTap: () => _renameFolder(folderId),
-          trailingAction: IconButton(
-            tooltip: 'Rename folder',
-            icon: const Icon(Icons.edit_outlined, size: 16),
-            visualDensity: VisualDensity.compact,
-            onPressed: () => _renameFolder(folderId),
-          ),
-          leadingAction: IconButton(
-            tooltip: expanded ? 'Collapse folder' : 'Expand folder',
-            icon: Icon(
-              expanded ? Icons.expand_more : Icons.chevron_right,
-              size: 16,
-            ),
-            visualDensity: VisualDensity.compact,
-            onPressed: () => setState(() {
-              if (expanded) {
-                _expandedFolders.remove(folderId);
-              } else {
-                _expandedFolders.add(folderId);
-              }
-            }),
+        DragTarget<_ExplorerDrag>(
+          key: ValueKey('folder-target-$folderId'),
+          onWillAcceptWithDetails: (details) =>
+              _canDropOnFolder(details.data, folderId),
+          onAcceptWithDetails: (details) =>
+              _moveToFolder(details.data, folderId),
+          builder: (context, candidates, rejected) => DecoratedBox(
+            position: DecorationPosition.foreground,
+            decoration: candidates.isNotEmpty || rejected.isNotEmpty
+                ? BoxDecoration(
+                    border: Border.all(
+                      color: candidates.isNotEmpty
+                          ? Theme.of(context).colorScheme.primary
+                          : Theme.of(context).colorScheme.error,
+                      width: 2,
+                    ),
+                  )
+                : const BoxDecoration(),
+            child: folder.parentId == null
+                ? folderRow
+                : _draggableExplorerRow(
+                    data: (project: _data, isFolder: true, id: folderId),
+                    label: folder.name,
+                    icon: Icons.folder_outlined,
+                    child: folderRow,
+                  ),
           ),
         ),
         if (expanded)
@@ -1124,15 +1369,21 @@ class _WorkspaceState extends State<_Workspace> {
             _buildFolder(child, depth + 1),
         if (expanded)
           for (final id in visibleRequirements)
-            _ExplorerRow(
-              depth: depth + 1,
-              selected: _selectedRequirementId == id,
-              highlighted: _highlightedRequirementId == id,
-              dirty: _dirtyRequirements.contains(id),
-              icon: Icons.description_outlined,
+            _draggableExplorerRow(
+              data: (project: _data, isFolder: false, id: id),
               label:
                   '${_data.requirement(id).displayId}  ${_data.requirement(id).title}',
-              onTap: () => _selectRequirement(id, focus: true),
+              icon: Icons.description_outlined,
+              child: _ExplorerRow(
+                depth: depth + 1,
+                selected: _selectedRequirementId == id,
+                highlighted: _highlightedRequirementId == id,
+                dirty: _dirtyRequirements.contains(id),
+                icon: Icons.description_outlined,
+                label:
+                    '${_data.requirement(id).displayId}  ${_data.requirement(id).title}',
+                onTap: () => _selectRequirement(id, focus: true),
+              ),
             ),
         if (expanded)
           for (final id in visibleComments)
@@ -2080,7 +2331,7 @@ class _WorkspaceState extends State<_Workspace> {
   }
 }
 
-class _ExplorerRow extends StatelessWidget {
+class _ExplorerRow extends StatefulWidget {
   const _ExplorerRow({
     required this.depth,
     required this.icon,
@@ -2091,6 +2342,8 @@ class _ExplorerRow extends StatelessWidget {
     this.dirty = false,
     this.leadingAction,
     this.trailingAction,
+    this.trailingActionWidth = 26,
+    this.hoverOnlyActions = false,
     this.onDoubleTap,
   });
 
@@ -2103,51 +2356,71 @@ class _ExplorerRow extends StatelessWidget {
   final bool dirty;
   final Widget? leadingAction;
   final Widget? trailingAction;
+  final double trailingActionWidth;
+  final bool hoverOnlyActions;
   final VoidCallback? onDoubleTap;
+
+  @override
+  State<_ExplorerRow> createState() => _ExplorerRowState();
+}
+
+class _ExplorerRowState extends State<_ExplorerRow> {
+  bool _hovering = false;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Material(
-      color: selected
+    final row = Material(
+      color: widget.selected
           ? scheme.primaryContainer
-          : highlighted
+          : widget.highlighted
           ? Colors.teal.withValues(alpha: 0.13)
           : Colors.transparent,
       child: InkWell(
-        onTap: onTap,
-        onDoubleTap: onDoubleTap,
+        onTap: widget.onTap,
+        onDoubleTap: widget.onDoubleTap,
         child: SizedBox(
           height: 29,
           child: Padding(
-            padding: EdgeInsets.only(left: 7 + depth * 18.0, right: 8),
+            padding: EdgeInsets.only(left: 7 + widget.depth * 18.0, right: 8),
             child: Row(
               children: [
-                if (leadingAction != null)
-                  SizedBox(width: 24, child: leadingAction)
+                if (widget.leadingAction != null)
+                  SizedBox(width: 24, child: widget.leadingAction)
                 else
                   const SizedBox(width: 24),
                 Icon(
-                  icon,
+                  widget.icon,
                   size: 17,
-                  color: highlighted ? Colors.teal.shade700 : null,
+                  color: widget.highlighted ? Colors.teal.shade700 : null,
                 ),
                 const SizedBox(width: 7),
                 Expanded(
                   child: Text(
-                    label,
+                    widget.label,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                if (dirty) Icon(Icons.circle, size: 7, color: scheme.primary),
-                if (trailingAction != null)
-                  SizedBox(width: 26, child: trailingAction),
+                if (widget.dirty)
+                  Icon(Icons.circle, size: 7, color: scheme.primary),
+                if (widget.trailingAction != null &&
+                    (!widget.hoverOnlyActions || _hovering))
+                  SizedBox(
+                    width: widget.trailingActionWidth,
+                    child: widget.trailingAction,
+                  ),
               ],
             ),
           ),
         ),
       ),
+    );
+    if (!widget.hoverOnlyActions) return row;
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovering = true),
+      onExit: (_) => setState(() => _hovering = false),
+      child: row,
     );
   }
 }

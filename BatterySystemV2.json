@@ -1,0 +1,94 @@
+{
+  "schemaVersion": 1,
+  "name": "BatterySystemV2",
+  "nextRequirementNumber": 5,
+  "nextEntityId": 108,
+  "folders": [
+    {
+      "id": 1,
+      "name": "SystemV2",
+      "description": "",
+      "parent": null,
+      "contents": {
+        "requirements": [],
+        "comments": [],
+        "folders": [
+          102
+        ]
+      }
+    },
+    {
+      "id": 102,
+      "name": "Schnitstellen",
+      "description": "",
+      "parent": 1,
+      "contents": {
+        "requirements": [],
+        "comments": [],
+        "folders": [
+          103
+        ]
+      }
+    },
+    {
+      "id": 103,
+      "name": "Maschinenstecker",
+      "description": "",
+      "parent": 102,
+      "contents": {
+        "requirements": [
+          1,
+          2,
+          4
+        ],
+        "comments": [],
+        "folders": []
+      }
+    }
+  ],
+  "requirements": [
+    {
+      "id": 1,
+      "title": "Maschinenstecker",
+      "description": "Das System muss über einen Stecker verfügen, mit dem das Batteriesystem mit der Maschine kommuniziert. ",
+      "rationale": "",
+      "variant": 101,
+      "relations": []
+    },
+    {
+      "id": 2,
+      "title": "Isolation der Kommunikationsleitungen",
+      "description": "Alle IOs (Digital oder Bussysteme) sollen Isoliert gegenüber der Maschine und der Steuerung des Kunden sein.",
+      "rationale": "Elektrsiche Fehler in der Steuerung der Maschine dürfen das Batteriesystem nicht beeinflussen. Ein verbinden des GND der Batteriesystem steuerung mit dem GND der Maschine um eine gemeinsame Spannungreferenz zu erreichen, birgt dieses Risiko.",
+      "variant": 101,
+      "relations": [
+        {
+          "type": "derived",
+          "target": 1
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "IO Spannungniveau",
+      "description": "Die Nominalspannung für das Digitale IO ist 24 V.",
+      "rationale": "Die Batteriesysteme werden hauptsächlich auf Maschinen mit 24 V Boardnetz eingesetzt.",
+      "variant": 101,
+      "relations": [
+        {
+          "type": "contained",
+          "target": 1
+        }
+      ]
+    }
+  ],
+  "comments": [],
+  "variants": [
+    {
+      "id": 101,
+      "parent": 0,
+      "name": "All systems",
+      "description": "Requirements shared by all systems."
+    }
+  ]
+}
