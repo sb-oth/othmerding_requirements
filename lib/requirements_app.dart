@@ -28,7 +28,9 @@ class _RequirementRelationEntry {
 }
 
 class RequirementsApp extends StatelessWidget {
-  const RequirementsApp({super.key});
+  const RequirementsApp({super.key, this.lastProjectStore});
+
+  final LastProjectStore? lastProjectStore;
 
   @override
   Widget build(BuildContext context) {
@@ -36,20 +38,22 @@ class RequirementsApp extends StatelessWidget {
       title: 'Oth Requirements',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(useMaterial3: true, fontFamily: 'Figtree'),
-      home: const _Workspace(),
+      home: _Workspace(lastProjectStore: lastProjectStore),
     );
   }
 }
 
 class _Workspace extends StatefulWidget {
-  const _Workspace();
+  const _Workspace({this.lastProjectStore});
+
+  final LastProjectStore? lastProjectStore;
 
   @override
   State<_Workspace> createState() => _WorkspaceState();
 }
 
 class _WorkspaceState extends State<_Workspace> {
-  final LastProjectStore _lastProjectStore = LastProjectStore();
+  late final LastProjectStore _lastProjectStore;
   ProjectRepository? _repository;
   final TextEditingController _searchController = TextEditingController();
   RequirementProject? _project;
@@ -88,6 +92,7 @@ class _WorkspaceState extends State<_Workspace> {
   @override
   void initState() {
     super.initState();
+    _lastProjectStore = widget.lastProjectStore ?? LastProjectStore();
     _titleController = TextEditingController();
     _descriptionController = TextEditingController();
     _rationaleController = TextEditingController();
@@ -1296,6 +1301,7 @@ class _WorkspaceState extends State<_Workspace> {
                 child: DropdownButtonFormField<int>(
                   initialValue: requirement.variantId,
                   isDense: true,
+                  isExpanded: true,
                   decoration: const InputDecoration(
                     labelText: 'Variant',
                     border: OutlineInputBorder(),
@@ -1304,7 +1310,14 @@ class _WorkspaceState extends State<_Workspace> {
                       .map(
                         (variant) => DropdownMenuItem(
                           value: variant.id,
-                          child: Text(variant.name),
+                          child: Tooltip(
+                            message: variant.name,
+                            child: Text(
+                              variant.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
                         ),
                       )
                       .toList(),
