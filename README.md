@@ -14,6 +14,7 @@ comments, relationships, and hierarchical variants.
   outgoing links on the right
 - Titled comments shown in the diagram and related to one or more requirements
 - Editable requirement title, description, rationale, variant, and relations
+- Change outgoing relationship types and confirm before removing relationships
 - Dirty-state indicators and explicit project saving
 - Tree-structured variant creation, editing, and protected deletion
 - A single JSON project database with monotonically increasing requirement IDs

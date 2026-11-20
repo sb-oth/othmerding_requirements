@@ -1238,10 +1238,19 @@ class _WorkspaceState extends State<_Workspace> {
               relations: outgoing,
               editable: true,
               onAdd: () => _showAddRelation(requirement),
-              onRemove: (relation) {
-                setState(() => requirement.relations.remove(relation));
-                _markRequirementDirty();
+              onChangeType: (relation, type) {
+                final index = requirement.relations.indexOf(relation);
+                if (index == -1 || relation.type == type) return;
+                setState(() {
+                  requirement.relations[index] = RequirementRelation(
+                    type: type,
+                    targetId: relation.targetId,
+                  );
+                  _dirtyRequirements.add(requirement.id);
+                });
               },
+              onRemove: (relation) =>
+                  _removeRequirementRelation(requirement, relation),
             ),
           ),
           const VerticalDivider(width: 1),
@@ -1388,6 +1397,7 @@ class _WorkspaceState extends State<_Workspace> {
     required List<_RequirementRelationEntry> relations,
     required bool editable,
     VoidCallback? onAdd,
+    void Function(RequirementRelation, RequirementRelationType)? onChangeType,
     ValueChanged<RequirementRelation>? onRemove,
   }) {
     return Padding(
@@ -1432,10 +1442,38 @@ class _WorkspaceState extends State<_Workspace> {
                       onTap: () =>
                           _selectRequirement(entry.requirement.id, focus: true),
                       trailing: editable
-                          ? IconButton(
-                              tooltip: 'Remove relation',
-                              icon: const Icon(Icons.close, size: 16),
-                              onPressed: () => onRemove?.call(entry.relation),
+                          ? Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                PopupMenuButton<RequirementRelationType>(
+                                  tooltip: 'Change relationship type',
+                                  enabled: !_saving,
+                                  padding: EdgeInsets.zero,
+                                  icon: const Icon(
+                                    Icons.edit_outlined,
+                                    size: 18,
+                                  ),
+                                  onSelected: (type) =>
+                                      onChangeType?.call(entry.relation, type),
+                                  itemBuilder: (context) => [
+                                    for (final type
+                                        in RequirementRelationType.values)
+                                      CheckedPopupMenuItem(
+                                        value: type,
+                                        checked: type == entry.relation.type,
+                                        child: Text(type.label),
+                                      ),
+                                  ],
+                                ),
+                                IconButton(
+                                  tooltip: 'Remove relation',
+                                  visualDensity: VisualDensity.compact,
+                                  icon: const Icon(Icons.close, size: 16),
+                                  onPressed: _saving
+                                      ? null
+                                      : () => onRemove?.call(entry.relation),
+                                ),
+                              ],
                             )
                           : null,
                     ),
@@ -1446,6 +1484,62 @@ class _WorkspaceState extends State<_Workspace> {
         ],
       ),
     );
+  }
+
+  Future<bool> _confirmRemoveRelation(String description) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Remove relationship?'),
+        content: Text('Remove $description?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    return confirmed == true;
+  }
+
+  Future<void> _removeRequirementRelation(
+    Requirement source,
+    RequirementRelation relation,
+  ) async {
+    final target = _data.requirement(relation.targetId);
+    final confirmed = await _confirmRemoveRelation(
+      'the ${relation.type.label} relationship from '
+      '${source.displayId} to ${target.displayId}',
+    );
+    if (!mounted || !confirmed || !source.relations.contains(relation)) return;
+    setState(() {
+      source.relations.remove(relation);
+      _dirtyRequirements.add(source.id);
+    });
+  }
+
+  Future<void> _removeCommentRelation(
+    RequirementComment comment,
+    Requirement requirement,
+  ) async {
+    final confirmed = await _confirmRemoveRelation(
+      'the Related relationship from "${comment.title}" '
+      'to ${requirement.displayId}',
+    );
+    if (!mounted ||
+        !confirmed ||
+        !comment.relatedRequirementIds.contains(requirement.id)) {
+      return;
+    }
+    setState(() {
+      comment.relatedRequirementIds.remove(requirement.id);
+      _dirtyComments.add(comment.id);
+    });
   }
 
   Future<void> _showAddRelation(Requirement source) async {
@@ -1799,11 +1893,10 @@ class _WorkspaceState extends State<_Workspace> {
                                       tooltip: 'Remove relationship',
                                       onPressed: _saving
                                           ? null
-                                          : () => setState(() {
-                                              comment.relatedRequirementIds
-                                                  .remove(requirement.id);
-                                              _dirtyComments.add(comment.id);
-                                            }),
+                                          : () => _removeCommentRelation(
+                                              comment,
+                                              requirement,
+                                            ),
                                       icon: const Icon(Icons.close, size: 16),
                                     ),
                                   ),
