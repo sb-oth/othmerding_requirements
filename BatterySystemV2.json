@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "name": "BatterySystemV2",
-  "nextRequirementNumber": 104,
-  "nextEntityId": 264,
+  "nextRequirementNumber": 115,
+  "nextEntityId": 280,
   "folders": [
     {
       "id": 1,
@@ -24,7 +24,8 @@
           172,
           174,
           213,
-          260
+          260,
+          264
         ]
       }
     },
@@ -57,7 +58,8 @@
           11,
           12,
           14,
-          7
+          7,
+          105
         ],
         "comments": [],
         "folders": [
@@ -162,6 +164,7 @@
       "id": 140,
       "name": "PDEinheit",
       "description": "",
+      "tag": "PD",
       "parent": 1,
       "contents": {
         "requirements": [
@@ -320,6 +323,7 @@
       "id": 170,
       "name": "Telemetrie",
       "description": "",
+      "tag": "TEL",
       "parent": 1,
       "contents": {
         "requirements": [
@@ -546,7 +550,9 @@
           227,
           229,
           235,
-          238
+          238,
+          267,
+          277
         ]
       }
     },
@@ -661,6 +667,7 @@
       "id": 244,
       "name": "Wartungsverlauf",
       "description": "",
+      "tag": "WV",
       "parent": 170,
       "contents": {
         "requirements": [
@@ -723,6 +730,78 @@
           101,
           102,
           103
+        ],
+        "comments": [],
+        "folders": []
+      }
+    },
+    {
+      "id": 264,
+      "name": "Dokumentation",
+      "description": "",
+      "tag": "DOC",
+      "parent": 1,
+      "contents": {
+        "requirements": [
+          104
+        ],
+        "comments": [],
+        "folders": []
+      }
+    },
+    {
+      "id": 267,
+      "name": "Fehlermeldungen Betrieb",
+      "description": "",
+      "parent": 210,
+      "contents": {
+        "requirements": [
+          106,
+          108,
+          109,
+          110
+        ],
+        "comments": [],
+        "folders": [
+          269,
+          275
+        ]
+      }
+    },
+    {
+      "id": 269,
+      "name": "Ladegerät",
+      "description": "",
+      "parent": 267,
+      "contents": {
+        "requirements": [
+          107
+        ],
+        "comments": [],
+        "folders": []
+      }
+    },
+    {
+      "id": 275,
+      "name": "Gleichstromwandler",
+      "description": "",
+      "parent": 267,
+      "contents": {
+        "requirements": [],
+        "comments": [],
+        "folders": []
+      }
+    },
+    {
+      "id": 277,
+      "name": "Systeminterne Fehlermeldungen",
+      "description": "",
+      "tag": "SF",
+      "parent": 210,
+      "contents": {
+        "requirements": [
+          113,
+          114
         ],
         "comments": [],
         "folders": []
@@ -1532,6 +1611,78 @@
       "title": "Mitarbeiter ID",
       "description": "",
       "rationale": "",
+      "variant": 101,
+      "relations": []
+    },
+    {
+      "id": 104,
+      "title": "Generieren von Dokumentation",
+      "description": "Wenn möglich, soll die Dokumentation für das System aus den gleichen Informationen wie der Source Code oder aus dem dem Source Code genertiert werden.",
+      "rationale": "Die Manuelle Pflege von Dokumentation und das übertragen von Informationen aus der Konfiguration oder dem Source code sind Arbeitsintensiv und vorallem sehr anfällig führ fehler.",
+      "variant": 101,
+      "relations": []
+    },
+    {
+      "id": 105,
+      "title": "Digitale IOs  - Verpolung",
+      "description": "Digitale IO müssen eine Verpolung bis -30 V dauerhaft aushalten.",
+      "rationale": "",
+      "variant": 101,
+      "relations": []
+    },
+    {
+      "id": 106,
+      "title": "Fehlermeldungen",
+      "description": "Es sollen alle Fehlermeldungen ausgegeben werden, die ihre Ursache in der Betriebsumgebung des Batteriesystems haben könnten.",
+      "rationale": "Die den Fehler verursachenden Umstände können hier vom Kunden selbst abgestellt werden. ",
+      "variant": 101,
+      "relations": []
+    },
+    {
+      "id": 107,
+      "title": "Netzseitige Fehler",
+      "description": "",
+      "rationale": "",
+      "variant": 101,
+      "relations": []
+    },
+    {
+      "id": 108,
+      "title": "HVIL",
+      "description": "Der Zustand des HVIL wird ausgegeben.",
+      "rationale": "",
+      "variant": 101,
+      "relations": []
+    },
+    {
+      "id": 109,
+      "title": "Vorladefehler",
+      "description": "",
+      "rationale": "",
+      "variant": 101,
+      "relations": []
+    },
+    {
+      "id": 110,
+      "title": "Entladefehler",
+      "description": "",
+      "rationale": "",
+      "variant": 101,
+      "relations": []
+    },
+    {
+      "id": 113,
+      "title": "Systeminterne Fehlermeldungen",
+      "description": "Fehlermeldungen, deren Ursprung Intern im Batteriesystem liegt, sollen dem Kunden vereinfacht aber differenziert angezeigt werden.",
+      "rationale": "Erfahrungswerte haben gezeigt, das viele Kunden es nicht schätzen vor einer Blackbox zu stehen.\nAuch wenn der Kunde nichts daran ändern kann, wenn ein Systeminterner fehler vorliegt, so möchte er trotzdem Wissen, was mit dem System nicht stimmt. \nWir wollen dem Kunden allerdings auch nicht alzu viel Wissen über den Aufbau des System geben. Außerdem unterliegt dies Sicherlich schnelleren Änderungen zwischen Revisionen und Software versionen. Deswegen die vereinfachung.",
+      "variant": 101,
+      "relations": []
+    },
+    {
+      "id": 114,
+      "title": "Erweiterbarkeit",
+      "description": "Es muss ein Mechanismus gefunden werden, bei dem die Internen Fehlermeldungen erweiterbar sind, ohne beim Kunden eine anpassung der Software erforderlich zu machen. ",
+      "rationale": "Die definition Interner Fehlermedlungen ist Volatil (z.B. bei unterschiedlichen Ladegeräten) oder wenn ein neuer DCDC wandeler eingesetzt wird. ",
       "variant": 101,
       "relations": []
     }

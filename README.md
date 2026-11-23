@@ -9,7 +9,7 @@ comments, relationships, and hierarchical variants.
 - VS Code-style explorer with folders, requirements, and comments
 - Optional uppercase folder tags inherited by contained requirements; tags stack
   from the project root and open their owning folder when clicked. The explorer
-  tree shows the base requirement ID without tags.
+  shows each tag beside its own folder and base requirement IDs without tags.
 - Drag the divider beside the explorer to resize its width, or the divider
   above the folder/requirement/comment editor to resize its height
 - Hover over a folder to rename it or delete it if empty; drag folders or

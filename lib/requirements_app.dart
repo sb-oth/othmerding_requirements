@@ -1442,7 +1442,7 @@ class _WorkspaceState extends State<_Workspace> {
           _selectedRequirementId == null &&
           _selectedCommentId == null,
       icon: expanded ? Icons.folder_open : Icons.folder_outlined,
-      label: folder.name,
+      label: folder.tag == null ? folder.name : '${folder.name} [${folder.tag}]',
       onTap: () => _selectFolder(folderId),
       onDoubleTap: () => _renameFolder(folderId),
       hoverOnlyActions: true,

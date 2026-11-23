@@ -286,6 +286,9 @@ void main() {
       );
       await tester.pumpAndSettle();
 
+      expect(find.text('Communications [COM]'), findsOneWidget);
+      expect(find.text('Telemetry [TEL]'), findsOneWidget);
+      expect(find.text('Telemetry [COM-TEL]'), findsNothing);
       await tester.tap(find.text('REQ-003  Nested telemetry'));
       await tester.pumpAndSettle();
       expect(
@@ -312,6 +315,8 @@ void main() {
         tester.widget<TextField>(_editorField('Tag')).controller!.text,
         'BUS',
       );
+      expect(find.text('Communications bus [BUS]'), findsOneWidget);
+      expect(find.text('Telemetry [TEL]'), findsOneWidget);
       await tester.tap(find.byTooltip('Save folder'));
       await _waitForText(tester, 'Project saved');
 
