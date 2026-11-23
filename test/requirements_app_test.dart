@@ -10,6 +10,72 @@ import 'package:oth_requirements/project_repository.dart';
 import 'package:oth_requirements/requirements_app.dart';
 
 void main() {
+  testWidgets('resizes workspace panels and clamps them to the window', (
+    tester,
+  ) async {
+    final project = _relationshipProject();
+    project.createComment(1, 2).title = 'Review note';
+    await _openProject(tester, project);
+    await tester.tap(find.text('REQ-001  Source'));
+    await tester.pumpAndSettle();
+
+    final explorer = find.byKey(const ValueKey('explorer-panel'));
+    final editor = find.byKey(const ValueKey('editor-panel'));
+    final explorerHandle = find.byKey(const ValueKey('explorer-resize-handle'));
+    final editorHandle = find.byKey(const ValueKey('editor-resize-handle'));
+    expect(tester.getSize(explorer).width, 286);
+    expect(tester.getSize(editor).height, 280);
+
+    final gesture = await tester.startGesture(tester.getCenter(explorerHandle));
+    await gesture.moveBy(const Offset(50, 0));
+    await gesture.moveBy(const Offset(50, 0));
+    await gesture.moveBy(const Offset(50, 0));
+    await gesture.up();
+    await tester.pumpAndSettle();
+    await tester.drag(editorHandle, const Offset(0, -100));
+    await tester.pumpAndSettle();
+    expect(tester.getSize(explorer).width, greaterThan(386));
+    expect(tester.getSize(editor).height, greaterThan(280));
+    expect(find.text('Source'), findsWidgets);
+
+    await tester.drag(explorerHandle, const Offset(-1000, 0));
+    await tester.pumpAndSettle();
+    await tester.drag(editorHandle, const Offset(0, 1000));
+    await tester.pumpAndSettle();
+    expect(tester.getSize(explorer).width, 200);
+    expect(tester.getSize(editor).height, 200);
+    expect(tester.takeException(), isNull);
+
+    await tester.drag(explorerHandle, const Offset(2000, 0));
+    await tester.pumpAndSettle();
+    await tester.drag(editorHandle, const Offset(0, -2000));
+    await tester.pumpAndSettle();
+    expect(tester.getSize(explorer).width, 842);
+    expect(tester.getSize(editor).height, 698);
+    expect(tester.takeException(), isNull);
+    await tester.enterText(_editorField('Title'), 'Edited while resized');
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+
+    await tester.binding.setSurfaceSize(const Size(960, 600));
+    await tester.pumpAndSettle();
+    expect(tester.getSize(explorer).width, 202);
+    expect(tester.getSize(editor).height, 398);
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.text('Review note').first);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('editor-panel')), findsOneWidget);
+    expect(tester.getSize(editor).height, 398);
+    expect(tester.takeException(), isNull);
+
+    await tester.binding.setSurfaceSize(const Size(1600, 900));
+    await tester.pumpAndSettle();
+    expect(tester.getSize(explorer).width, 842);
+    expect(tester.getSize(editor).height, 698);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('Ctrl+S saves all project changes while editing a requirement', (
     tester,
   ) async {

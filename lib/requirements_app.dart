@@ -78,6 +78,8 @@ class _WorkspaceState extends State<_Workspace> {
   String _search = '';
   bool _saving = false;
   bool _variantsVisible = false;
+  double _explorerWidth = 286;
+  double _editorHeight = 280;
   final Set<int> _expandedFolders = {1};
   final Set<int> _dirtyRequirements = {};
   final Set<int> _newRequirements = {};
@@ -1024,39 +1026,116 @@ class _WorkspaceState extends State<_Workspace> {
               children: [
                 _buildTitleBar(context),
                 Expanded(
-                  child: Row(
-                    children: [
-                      SizedBox(width: 286, child: _buildExplorer(context)),
-                      const VerticalDivider(width: 1),
-                      Expanded(
-                        child: Column(
-                          children: [
-                            Expanded(
-                              flex: 6,
-                              child: _variantsVisible
-                                  ? _buildVariantTable(context)
-                                  : RequirementsGraph(
-                                      project: _data,
-                                      requirementIds: _graphIds,
-                                      commentIds: _graphCommentIds,
-                                      selectedId: _selectedRequirementId,
-                                      selectedCommentId: _selectedCommentId,
-                                      highlightedId: _highlightedRequirementId,
-                                      onSelect: _selectFromGraph,
-                                      onSelectComment: _selectComment,
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      const handleSize = 8.0;
+                      final maxExplorerWidth =
+                          (constraints.maxWidth - handleSize - 750).clamp(
+                            0.0,
+                            constraints.maxWidth,
+                          );
+                      final minExplorerWidth = maxExplorerWidth.clamp(
+                        0.0,
+                        200.0,
+                      );
+                      final explorerWidth = _explorerWidth.clamp(
+                        minExplorerWidth,
+                        maxExplorerWidth,
+                      );
+                      final maxEditorHeight =
+                          (constraints.maxHeight - handleSize - 160).clamp(
+                            0.0,
+                            constraints.maxHeight,
+                          );
+                      final minEditorHeight = maxEditorHeight.clamp(0.0, 200.0);
+                      final editorHeight = _editorHeight.clamp(
+                        minEditorHeight,
+                        maxEditorHeight,
+                      );
+                      return Row(
+                        children: [
+                          SizedBox(
+                            key: const ValueKey('explorer-panel'),
+                            width: explorerWidth,
+                            child: _buildExplorer(context),
+                          ),
+                          MouseRegion(
+                            cursor: SystemMouseCursors.resizeColumn,
+                            child: GestureDetector(
+                              key: const ValueKey('explorer-resize-handle'),
+                              behavior: HitTestBehavior.opaque,
+                              onHorizontalDragUpdate: (details) => setState(
+                                () => _explorerWidth =
+                                    (_explorerWidth.clamp(
+                                              minExplorerWidth,
+                                              maxExplorerWidth,
+                                            ) +
+                                            details.delta.dx)
+                                        .clamp(
+                                          minExplorerWidth,
+                                          maxExplorerWidth,
+                                        ),
+                              ),
+                              child: const SizedBox(
+                                width: handleSize,
+                                child: VerticalDivider(width: 1),
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            child: Column(
+                              children: [
+                                Expanded(
+                                  child: _variantsVisible
+                                      ? _buildVariantTable(context)
+                                      : RequirementsGraph(
+                                          project: _data,
+                                          requirementIds: _graphIds,
+                                          commentIds: _graphCommentIds,
+                                          selectedId: _selectedRequirementId,
+                                          selectedCommentId: _selectedCommentId,
+                                          highlightedId:
+                                              _highlightedRequirementId,
+                                          onSelect: _selectFromGraph,
+                                          onSelectComment: _selectComment,
+                                        ),
+                                ),
+                                MouseRegion(
+                                  cursor: SystemMouseCursors.resizeRow,
+                                  child: GestureDetector(
+                                    key: const ValueKey('editor-resize-handle'),
+                                    behavior: HitTestBehavior.opaque,
+                                    onVerticalDragUpdate: (details) => setState(
+                                      () => _editorHeight =
+                                          (_editorHeight.clamp(
+                                                    minEditorHeight,
+                                                    maxEditorHeight,
+                                                  ) -
+                                                  details.delta.dy)
+                                              .clamp(
+                                                minEditorHeight,
+                                                maxEditorHeight,
+                                              ),
                                     ),
+                                    child: const SizedBox(
+                                      height: handleSize,
+                                      child: Divider(height: 1),
+                                    ),
+                                  ),
+                                ),
+                                SizedBox(
+                                  key: const ValueKey('editor-panel'),
+                                  height: editorHeight,
+                                  child: _selectedCommentId != null
+                                      ? _buildCommentEditor(context)
+                                      : _buildRequirementEditor(context),
+                                ),
+                              ],
                             ),
-                            const Divider(height: 1),
-                            SizedBox(
-                              height: 280,
-                              child: _selectedCommentId != null
-                                  ? _buildCommentEditor(context)
-                                  : _buildRequirementEditor(context),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
+                          ),
+                        ],
+                      );
+                    },
                   ),
                 ),
               ],
@@ -1477,49 +1556,61 @@ class _WorkspaceState extends State<_Workspace> {
     ];
     return ColoredBox(
       color: Theme.of(context).colorScheme.surface,
-      child: Row(
-        children: [
-          Expanded(flex: 7, child: _buildEditableColumn(context, requirement)),
-          const VerticalDivider(width: 1),
-          Expanded(
-            flex: 3,
-            child: _buildRelations(
-              context,
-              title: 'Outgoing',
-              relations: outgoing,
-              editable: true,
-              onAdd: () => _showAddRelation(requirement),
-              onChangeType: (relation, type) {
-                final index = requirement.relations.indexOf(relation);
-                if (index == -1 || relation.type == type) return;
-                setState(() {
-                  requirement.relations[index] = RequirementRelation(
-                    type: type,
-                    targetId: relation.targetId,
-                  );
-                  _dirtyRequirements.add(requirement.id);
-                });
-              },
-              onRemove: (relation) =>
-                  _removeRequirementRelation(requirement, relation),
-            ),
-          ),
-          const VerticalDivider(width: 1),
-          Expanded(
-            flex: 3,
-            child: _buildRelations(
-              context,
-              title: 'Incoming',
-              relations: incoming,
-              editable: false,
-            ),
-          ),
-        ],
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxWidth < 1100;
+          return Row(
+            children: [
+              Expanded(
+                flex: compact ? 8 : 7,
+                child: _buildEditableColumn(context, requirement, compact),
+              ),
+              const VerticalDivider(width: 1),
+              Expanded(
+                flex: compact ? 2 : 3,
+                child: _buildRelations(
+                  context,
+                  title: 'Outgoing',
+                  relations: outgoing,
+                  editable: true,
+                  onAdd: () => _showAddRelation(requirement),
+                  onChangeType: (relation, type) {
+                    final index = requirement.relations.indexOf(relation);
+                    if (index == -1 || relation.type == type) return;
+                    setState(() {
+                      requirement.relations[index] = RequirementRelation(
+                        type: type,
+                        targetId: relation.targetId,
+                      );
+                      _dirtyRequirements.add(requirement.id);
+                    });
+                  },
+                  onRemove: (relation) =>
+                      _removeRequirementRelation(requirement, relation),
+                ),
+              ),
+              const VerticalDivider(width: 1),
+              Expanded(
+                flex: compact ? 2 : 3,
+                child: _buildRelations(
+                  context,
+                  title: 'Incoming',
+                  relations: incoming,
+                  editable: false,
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
 
-  Widget _buildEditableColumn(BuildContext context, Requirement requirement) {
+  Widget _buildEditableColumn(
+    BuildContext context,
+    Requirement requirement,
+    bool compact,
+  ) {
     final dirty = _dirtyRequirements.contains(requirement.id);
     return Padding(
       padding: const EdgeInsets.all(8),
@@ -1557,7 +1648,7 @@ class _WorkspaceState extends State<_Workspace> {
               ),
               const SizedBox(width: 8),
               SizedBox(
-                width: 170,
+                width: compact ? 120 : 170,
                 child: DropdownButtonFormField<int>(
                   initialValue: requirement.variantId,
                   isDense: true,

@@ -7,6 +7,8 @@ comments, relationships, and hierarchical variants.
 
 - Create a project in a location selected with the Windows Save dialog
 - VS Code-style explorer with folders, requirements, and comments
+- Drag the divider beside the explorer to resize its width, or the divider
+  above the requirement/comment editor to resize its height
 - Hover over a folder to rename it or delete it if empty; drag folders or
   requirements onto another folder to move them
 - Search by ID, variant (`version:`), or free text
