@@ -145,6 +145,31 @@ void main() {
       );
     });
 
+    test('normalizes folder tags and stacks them from root to leaf', () {
+      final project = RequirementProject.empty(name: 'Tagged folders');
+      final communications = project.createFolder(1)
+        ..name = 'Communications'
+        ..tag = 'com';
+      final telemetry = project.createFolder(communications.id)
+        ..name = 'Telemetry'
+        ..tag = ' tel ';
+      final requirement = project.createRequirement(telemetry.id);
+
+      expect(communications.tag, 'COM');
+      expect(telemetry.tag, 'TEL');
+      expect(project.tagsForRequirement(requirement.id), [
+        (folderId: communications.id, value: 'COM'),
+        (folderId: telemetry.id, value: 'TEL'),
+      ]);
+      expect(project.displayIdForRequirement(requirement.id), 'REQ-001-COM-TEL');
+
+      final restored = RequirementProject.fromJson(
+        jsonDecode(project.toPrettyJson()) as Map<String, Object?>,
+      );
+      expect(restored.folder(telemetry.id).tag, 'TEL');
+      expect(restored.displayIdForRequirement(requirement.id), 'REQ-001-COM-TEL');
+    });
+
     test('supports relationship types and migrates legacy specifies links', () {
       final requirement = Requirement.fromJson({
         'id': 1,

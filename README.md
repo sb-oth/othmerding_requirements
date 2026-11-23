@@ -7,8 +7,11 @@ comments, relationships, and hierarchical variants.
 
 - Create a project in a location selected with the Windows Save dialog
 - VS Code-style explorer with folders, requirements, and comments
+- Optional uppercase folder tags inherited by contained requirements; tags stack
+  from the project root and open their owning folder when clicked. The explorer
+  tree shows the base requirement ID without tags.
 - Drag the divider beside the explorer to resize its width, or the divider
-  above the requirement/comment editor to resize its height
+  above the folder/requirement/comment editor to resize its height
 - Hover over a folder to rename it or delete it if empty; drag folders or
   requirements onto another folder to move them
 - Search by ID, variant (`version:`), or free text
@@ -18,6 +21,7 @@ comments, relationships, and hierarchical variants.
   outgoing links on the right
 - Titled comments shown in the diagram and related to one or more requirements
 - Editable requirement title, description, rationale, variant, and relations
+- Folder name, description, and tag editing in the lower editor panel
 - Change outgoing relationship types and confirm before removing relationships
 - Dirty-state indicators and explicit project saving
 - Tree-structured variant creation, editing, and protected deletion

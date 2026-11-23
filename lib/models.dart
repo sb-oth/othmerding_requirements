@@ -90,29 +90,39 @@ class RequirementFolder {
     required this.id,
     required this.name,
     required this.description,
+    String? tag,
     this.parentId,
     List<int> requirementIds = const [],
     List<int> commentIds = const [],
     List<int> childFolderIds = const [],
-  }) : requirementIds = List<int>.of(requirementIds),
+  }) : _tag = _normalizeFolderTag(tag),
+       requirementIds = List<int>.of(requirementIds),
        commentIds = List<int>.of(commentIds),
        childFolderIds = List<int>.of(childFolderIds);
 
   final int id;
   String name;
   String description;
+  String? _tag;
   int? parentId;
   List<int> requirementIds;
   List<int> commentIds;
   List<int> childFolderIds;
 
+  String? get tag => _tag;
+
+  set tag(String? value) => _tag = _normalizeFolderTag(value);
+
   bool get isEmpty =>
       requirementIds.isEmpty && commentIds.isEmpty && childFolderIds.isEmpty;
+
+  RequirementFolder copy() => RequirementFolder.fromJson(toJson());
 
   Map<String, Object?> toJson() => {
     'id': id,
     'name': name,
     'description': description,
+    if (tag != null) 'tag': tag,
     'parent': parentId,
     'contents': {
       'requirements': requirementIds,
@@ -129,6 +139,7 @@ class RequirementFolder {
       id: json['id'] as int,
       name: (json['name'] as String?) ?? '',
       description: (json['description'] as String?) ?? '',
+      tag: json['tag'] as String?,
       parentId: json['parent'] as int?,
       requirementIds: _intList(contents['requirements']),
       commentIds: _intList(contents['comments']),
@@ -136,6 +147,8 @@ class RequirementFolder {
     );
   }
 }
+
+typedef RequirementFolderTag = ({int folderId, String value});
 
 class RequirementComment {
   RequirementComment({
@@ -375,6 +388,30 @@ class RequirementProject {
     return ancestors;
   }
 
+  List<RequirementFolderTag> tagsForFolder(int folderId) {
+    final path = <int>[
+      folderId,
+      ...ancestorsOfFolder(folderId),
+    ].reversed;
+    return [
+      for (final id in path)
+        if (folder(id).tag case final tag?) (folderId: id, value: tag),
+    ];
+  }
+
+  List<RequirementFolderTag> tagsForRequirement(int requirementId) {
+    final containing = containingFolder(requirementId);
+    return containing == null ? const [] : tagsForFolder(containing.id);
+  }
+
+  String displayIdForRequirement(int requirementId) {
+    final tags = tagsForRequirement(requirementId).map((tag) => tag.value);
+    return [
+      requirement(requirementId).displayId,
+      ...tags,
+    ].join('-');
+  }
+
   String toPrettyJson() => const JsonEncoder.withIndent('  ').convert(toJson());
 
   Map<String, Object?> toJson() => {
@@ -548,3 +585,8 @@ class RequirementProject {
 
 List<int> _intList(Object? value) =>
     (value as List<dynamic>? ?? const []).map((id) => id as int).toList();
+
+String? _normalizeFolderTag(String? value) {
+  final normalized = value?.trim().toUpperCase();
+  return normalized == null || normalized.isEmpty ? null : normalized;
+}

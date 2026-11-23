@@ -85,7 +85,9 @@ class _WorkspaceState extends State<_Workspace> {
   final Set<int> _newRequirements = {};
   final Set<int> _dirtyComments = {};
   final Set<int> _newComments = {};
+  final Set<int> _dirtyFolders = {};
   final Map<int, Requirement> _requirementBaselines = {};
+  final Map<int, RequirementFolder> _folderBaselines = {};
   bool _projectDirty = false;
 
   late TextEditingController _titleController;
@@ -93,6 +95,9 @@ class _WorkspaceState extends State<_Workspace> {
   late TextEditingController _rationaleController;
   late TextEditingController _commentTitleController;
   late TextEditingController _commentController;
+  late TextEditingController _folderNameController;
+  late TextEditingController _folderDescriptionController;
+  late TextEditingController _folderTagController;
 
   RequirementProject get _data => _project!;
 
@@ -101,7 +106,8 @@ class _WorkspaceState extends State<_Workspace> {
       _dirtyRequirements.isNotEmpty ||
       _newRequirements.isNotEmpty ||
       _dirtyComments.isNotEmpty ||
-      _newComments.isNotEmpty;
+      _newComments.isNotEmpty ||
+      _dirtyFolders.isNotEmpty;
 
   @override
   void initState() {
@@ -112,6 +118,9 @@ class _WorkspaceState extends State<_Workspace> {
     _rationaleController = TextEditingController();
     _commentTitleController = TextEditingController();
     _commentController = TextEditingController();
+    _folderNameController = TextEditingController();
+    _folderDescriptionController = TextEditingController();
+    _folderTagController = TextEditingController();
     _loadProject();
   }
 
@@ -123,6 +132,9 @@ class _WorkspaceState extends State<_Workspace> {
     _rationaleController.dispose();
     _commentTitleController.dispose();
     _commentController.dispose();
+    _folderNameController.dispose();
+    _folderDescriptionController.dispose();
+    _folderTagController.dispose();
     super.dispose();
   }
 
@@ -166,6 +178,12 @@ class _WorkspaceState extends State<_Workspace> {
         : _data.comments.firstWhere((item) => item.id == _selectedCommentId);
     _commentTitleController.text = comment?.title ?? '';
     _commentController.text = comment?.description ?? '';
+    final folder = _selectedFolderId == null
+        ? null
+        : _data.folder(_selectedFolderId!);
+    _folderNameController.text = folder?.name ?? '';
+    _folderDescriptionController.text = folder?.description ?? '';
+    _folderTagController.text = folder?.tag ?? '';
   }
 
   Requirement? get _activeRequirement => _selectedRequirementId == null
@@ -205,6 +223,12 @@ class _WorkspaceState extends State<_Workspace> {
       final currentComments = {
         for (final item in project.comments) item.id: item,
       };
+      final savedFolders = {
+        for (final item in savedProject.folders) item.id: item,
+      };
+      final currentFolders = {
+        for (final item in project.folders) item.id: item,
+      };
       setState(() {
         _dirtyRequirements.removeWhere((id) {
           final saved = savedRequirements[id];
@@ -222,6 +246,13 @@ class _WorkspaceState extends State<_Workspace> {
               jsonEncode(saved.toJson()) == jsonEncode(current.toJson());
         });
         _newComments.removeWhere(savedComments.containsKey);
+        _dirtyFolders.removeWhere((id) {
+          final saved = savedFolders[id];
+          final current = currentFolders[id];
+          return saved != null &&
+              current != null &&
+              jsonEncode(saved.toJson()) == jsonEncode(current.toJson());
+        });
         if (_projectStructure(project) == _projectStructure(savedProject)) {
           _projectDirty = false;
         }
@@ -230,6 +261,13 @@ class _WorkspaceState extends State<_Workspace> {
           ..addEntries(
             savedProject.requirements.map(
               (requirement) => MapEntry(requirement.id, requirement.copy()),
+            ),
+          );
+        _folderBaselines
+          ..removeWhere((id, _) => !currentFolders.containsKey(id))
+          ..addEntries(
+            savedProject.folders.map(
+              (folder) => MapEntry(folder.id, folder.copy()),
             ),
           );
       });
@@ -427,12 +465,18 @@ class _WorkspaceState extends State<_Workspace> {
     _newRequirements.clear();
     _dirtyComments.clear();
     _newComments.clear();
+    _dirtyFolders.clear();
     _requirementBaselines
       ..clear()
       ..addEntries(
         project.requirements.map(
           (requirement) => MapEntry(requirement.id, requirement.copy()),
         ),
+      );
+    _folderBaselines
+      ..clear()
+      ..addEntries(
+        project.folders.map((folder) => MapEntry(folder.id, folder.copy())),
       );
     _projectDirty = false;
     _loadError = null;
@@ -544,6 +588,9 @@ class _WorkspaceState extends State<_Workspace> {
       _selectedFolderId = id;
       _selectedRequirementId = null;
       _selectedCommentId = null;
+      _expandedFolders
+        ..add(id)
+        ..addAll(_data.ancestorsOfFolder(id));
       _loadEditor();
     });
   }
@@ -606,6 +653,7 @@ class _WorkspaceState extends State<_Workspace> {
     final child = _data.createFolder(_selectedFolderId!);
     setState(() {
       _projectDirty = true;
+      _dirtyFolders.add(child.id);
       _expandedFolders.add(_selectedFolderId!);
       _selectedFolderId = child.id;
       _selectedRequirementId = null;
@@ -649,6 +697,8 @@ class _WorkspaceState extends State<_Workspace> {
       project.deleteFolder(id);
       setState(() {
         _expandedFolders.remove(id);
+        _dirtyFolders.remove(id);
+        _folderBaselines.remove(id);
         if (_selectedFolderId == id) _selectedFolderId = parentId;
         _projectDirty = true;
       });
@@ -778,8 +828,30 @@ class _WorkspaceState extends State<_Workspace> {
     if (name == null || name == folder.name) return;
     setState(() {
       folder.name = name;
-      _projectDirty = true;
+      _dirtyFolders.add(folder.id);
+      _loadEditor();
     });
+  }
+
+  void _markFolderDirty(RequirementFolder folder) {
+    setState(() => _dirtyFolders.add(folder.id));
+  }
+
+  void _revertFolderChanges() {
+    final folderId = _selectedFolderId;
+    if (folderId == null) return;
+    final baseline = _folderBaselines[folderId];
+    if (baseline == null) return;
+    final folder = _data.folder(folderId);
+    folder
+      ..name = baseline.name
+      ..description = baseline.description
+      ..tag = baseline.tag;
+    setState(() {
+      _dirtyFolders.remove(folderId);
+      _loadEditor();
+    });
+    _showMessage('Folder changes reverted');
   }
 
   void _addComment() {
@@ -851,7 +923,8 @@ class _WorkspaceState extends State<_Workspace> {
       builder: (context) => AlertDialog(
         title: const Text('Delete requirement?'),
         content: Text(
-          'Delete ${requirement.displayId} "${requirement.title}"? '
+          'Delete ${_data.displayIdForRequirement(requirement.id)} '
+          '"${requirement.title}"? '
           'This cannot be undone.',
         ),
         actions: [
@@ -882,7 +955,7 @@ class _WorkspaceState extends State<_Workspace> {
     if (repository == null) return;
     final folderId = _data.containingFolder(id)?.id;
     final isNew = _newRequirements.contains(id);
-    final displayId = requirement.displayId;
+    final displayId = _data.displayIdForRequirement(requirement.id);
     setState(() => _saving = true);
     try {
       if (!isNew) await repository.deleteRequirement(id);
@@ -1098,6 +1171,7 @@ class _WorkspaceState extends State<_Workspace> {
                                               _highlightedRequirementId,
                                           onSelect: _selectFromGraph,
                                           onSelectComment: _selectComment,
+                                          onSelectFolder: _selectFolder,
                                         ),
                                 ),
                                 MouseRegion(
@@ -1128,7 +1202,9 @@ class _WorkspaceState extends State<_Workspace> {
                                   height: editorHeight,
                                   child: _selectedCommentId != null
                                       ? _buildCommentEditor(context)
-                                      : _buildRequirementEditor(context),
+                                      : _selectedRequirementId != null
+                                      ? _buildRequirementEditor(context)
+                                      : _buildFolderEditor(context),
                                 ),
                               ],
                             ),
@@ -1335,7 +1411,8 @@ class _WorkspaceState extends State<_Workspace> {
           Padding(
             padding: const EdgeInsets.all(8),
             child: Text(
-              '${_data.requirements.length} requirements  •  ${_dirtyRequirements.length + _dirtyComments.length} modified',
+              '${_data.requirements.length} requirements  •  '
+              '${_dirtyRequirements.length + _dirtyComments.length + _dirtyFolders.length} modified',
               style: Theme.of(context).textTheme.labelSmall,
             ),
           ),
@@ -1482,10 +1559,9 @@ class _WorkspaceState extends State<_Workspace> {
     if (_search.isEmpty) return true;
     final query = _search.trim().toLowerCase();
     final requirement = _data.requirement(id);
+    final displayId = _data.displayIdForRequirement(id);
     if (query.startsWith('id:')) {
-      return requirement.displayId.toLowerCase().contains(
-        query.substring(3).trim(),
-      );
+      return displayId.toLowerCase().contains(query.substring(3).trim());
     }
     if (query.startsWith('version:')) {
       return _data
@@ -1499,7 +1575,7 @@ class _WorkspaceState extends State<_Workspace> {
         .map((comment) => '${comment.title} ${comment.description}')
         .join(' ');
     return _matchesText(
-      '${requirement.displayId} ${requirement.title} ${requirement.description} '
+      '$displayId ${requirement.title} ${requirement.description} '
       '${requirement.rationale} $commentText',
     );
   }
@@ -1513,7 +1589,9 @@ class _WorkspaceState extends State<_Workspace> {
 
   bool _folderMatches(int folderId) {
     final folder = _data.folder(folderId);
-    return _matchesText('${folder.name} ${folder.description}') ||
+    return _matchesText(
+          '${folder.name} ${folder.description} ${folder.tag ?? ''}',
+        ) ||
         folder.requirementIds.any(_matchesRequirement) ||
         folder.commentIds.any(_matchesComment) ||
         folder.childFolderIds.any(_folderMatches);
@@ -1521,6 +1599,110 @@ class _WorkspaceState extends State<_Workspace> {
 
   bool _matchesText(String value) =>
       value.toLowerCase().contains(_search.trim().toLowerCase());
+
+  Widget _requirementIdentifier(
+    Requirement requirement, {
+    ValueChanged<int>? onSelectFolder,
+  }) =>
+      _RequirementIdentifier(
+        requirement: requirement,
+        tags: _data.tagsForRequirement(requirement.id),
+        onSelectFolder: onSelectFolder ?? _selectFolder,
+      );
+
+  Widget _buildFolderEditor(BuildContext context) {
+    final folderId = _selectedFolderId;
+    if (folderId == null) {
+      return const Center(child: Text('Select an item in the explorer.'));
+    }
+    final folder = _data.folder(folderId);
+    final dirty = _dirtyFolders.contains(folder.id);
+    return ColoredBox(
+      color: Theme.of(context).colorScheme.surface,
+      child: Padding(
+        padding: const EdgeInsets.all(8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.folder_outlined),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    controller: _folderNameController,
+                    onChanged: (value) {
+                      folder.name = value;
+                      _markFolderDirty(folder);
+                    },
+                    decoration: const InputDecoration(
+                      labelText: 'Folder name',
+                      isDense: true,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                SizedBox(
+                  width: 160,
+                  child: TextField(
+                    controller: _folderTagController,
+                    inputFormatters: [
+                      TextInputFormatter.withFunction(
+                        (oldValue, newValue) => newValue.copyWith(
+                          text: newValue.text.toUpperCase(),
+                        ),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      folder.tag = value;
+                      _markFolderDirty(folder);
+                    },
+                    decoration: const InputDecoration(
+                      labelText: 'Tag',
+                      hintText: 'Optional',
+                      isDense: true,
+                    ),
+                  ),
+                ),
+                if (dirty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                    child: Icon(
+                      Icons.circle,
+                      size: 8,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                  ),
+                IconButton(
+                  tooltip: 'Revert folder changes',
+                  onPressed: dirty && _folderBaselines.containsKey(folder.id)
+                      ? _revertFolderChanges
+                      : null,
+                  icon: const Icon(Icons.undo),
+                ),
+                IconButton.filled(
+                  tooltip: 'Save folder',
+                  onPressed: dirty && !_saving ? _saveProject : null,
+                  icon: const Icon(Icons.save_outlined),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Expanded(
+              child: _EditorField(
+                label: 'Description',
+                controller: _folderDescriptionController,
+                onChanged: (value) {
+                  folder.description = value;
+                  _markFolderDirty(folder);
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   Widget _buildRequirementEditor(BuildContext context) {
     final requirement = _activeRequirement;
@@ -1625,7 +1807,7 @@ class _WorkspaceState extends State<_Workspace> {
                 onPressed: () =>
                     _selectRequirement(requirement.id, focus: true),
               ),
-              Text(requirement.displayId),
+              _requirementIdentifier(requirement),
               if (dirty)
                 Padding(
                   padding: const EdgeInsets.only(left: 6),
@@ -1774,7 +1956,7 @@ class _WorkspaceState extends State<_Workspace> {
                     (entry) => ListTile(
                       dense: true,
                       contentPadding: const EdgeInsets.only(left: 8),
-                      title: Text(entry.requirement.displayId),
+                      title: _requirementIdentifier(entry.requirement),
                       subtitle: Text(
                         '${entry.relation.type.label} · '
                         '${entry.requirement.title}',
@@ -1856,7 +2038,8 @@ class _WorkspaceState extends State<_Workspace> {
     final target = _data.requirement(relation.targetId);
     final confirmed = await _confirmRemoveRelation(
       'the ${relation.type.label} relationship from '
-      '${source.displayId} to ${target.displayId}',
+      '${_data.displayIdForRequirement(source.id)} to '
+      '${_data.displayIdForRequirement(target.id)}',
     );
     if (!mounted || !confirmed || !source.relations.contains(relation)) return;
     setState(() {
@@ -1871,7 +2054,7 @@ class _WorkspaceState extends State<_Workspace> {
   ) async {
     final confirmed = await _confirmRemoveRelation(
       'the Related relationship from "${comment.title}" '
-      'to ${requirement.displayId}',
+      'to ${_data.displayIdForRequirement(requirement.id)}',
     );
     if (!mounted ||
         !confirmed ||
@@ -1902,9 +2085,9 @@ class _WorkspaceState extends State<_Workspace> {
               )
               .where((item) {
                 final search = query.trim().toLowerCase();
-                return '${item.displayId} ${item.title}'.toLowerCase().contains(
-                  search,
-                );
+                return '${_data.displayIdForRequirement(item.id)} ${item.title}'
+                    .toLowerCase()
+                    .contains(search);
               })
               .toList();
           return AlertDialog(
@@ -1973,7 +2156,13 @@ class _WorkspaceState extends State<_Workspace> {
                                   ),
                                 ),
                                 leading: const Icon(Icons.description_outlined),
-                                title: Text(item.displayId),
+                                title: _requirementIdentifier(
+                                  item,
+                                  onSelectFolder: (folderId) {
+                                    Navigator.pop(context);
+                                    _selectFolder(folderId);
+                                  },
+                                ),
                                 subtitle: Text(
                                   item.title,
                                   maxLines: 1,
@@ -2019,7 +2208,8 @@ class _WorkspaceState extends State<_Workspace> {
               )
               .where((requirement) {
                 final search = query.trim().toLowerCase();
-                return '${requirement.displayId} ${requirement.title}'
+                return '${_data.displayIdForRequirement(requirement.id)} '
+                        '${requirement.title}'
                     .toLowerCase()
                     .contains(search);
               })
@@ -2055,7 +2245,13 @@ class _WorkspaceState extends State<_Workspace> {
                                 onTap: () =>
                                     Navigator.pop(context, requirement.id),
                                 leading: const Icon(Icons.description_outlined),
-                                title: Text(requirement.displayId),
+                                title: _requirementIdentifier(
+                                  requirement,
+                                  onSelectFolder: (folderId) {
+                                    Navigator.pop(context);
+                                    _selectFolder(folderId);
+                                  },
+                                ),
                                 subtitle: Text(
                                   requirement.title,
                                   maxLines: 1,
@@ -2225,7 +2421,7 @@ class _WorkspaceState extends State<_Workspace> {
                                   (requirement) => ListTile(
                                     dense: true,
                                     contentPadding: EdgeInsets.zero,
-                                    title: Text(requirement.displayId),
+                                    title: _requirementIdentifier(requirement),
                                     subtitle: Text(
                                       requirement.title,
                                       maxLines: 1,
@@ -2419,6 +2615,41 @@ class _WorkspaceState extends State<_Workspace> {
     }
     setState(() => _data.variants.removeWhere((item) => item.id == variant.id));
     await _saveProject();
+  }
+}
+
+class _RequirementIdentifier extends StatelessWidget {
+  const _RequirementIdentifier({
+    required this.requirement,
+    required this.tags,
+    required this.onSelectFolder,
+  });
+
+  final Requirement requirement;
+  final List<RequirementFolderTag> tags;
+  final ValueChanged<int> onSelectFolder;
+
+  @override
+  Widget build(BuildContext context) {
+    if (tags.isEmpty) return Text(requirement.displayId);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(requirement.displayId),
+        for (final tag in tags)
+          InkWell(
+            key: ValueKey('requirement-tag-${requirement.id}-${tag.folderId}'),
+            onTap: () => onSelectFolder(tag.folderId),
+            child: Text(
+              '-${tag.value}',
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.primary,
+                decoration: TextDecoration.underline,
+              ),
+            ),
+          ),
+      ],
+    );
   }
 }
 

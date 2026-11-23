@@ -262,6 +262,118 @@ void main() {
     expect(find.byTooltip(longName), findsOneWidget);
   });
 
+  testWidgets(
+    'edits folder tags and opens tagged folders from graph suffixes',
+    (tester) async {
+      final project = _relationshipProject();
+      final communications = project.createFolder(1)
+        ..name = 'Communications'
+        ..tag = 'COM';
+      final telemetry = project.createFolder(communications.id)
+        ..name = 'Telemetry'
+        ..tag = 'TEL';
+      final nested = project.createRequirement(telemetry.id)
+        ..title = 'Nested telemetry';
+      final repository = await _openProject(tester, project);
+
+      await tester.enterText(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is TextField &&
+              widget.decoration?.hintText == 'Search: id:, version:, or text',
+        ),
+        'Nested telemetry',
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('REQ-003  Nested telemetry'));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(ValueKey('graph-tag-${communications.id}')),
+        findsOneWidget,
+      );
+      expect(find.byKey(ValueKey('graph-tag-${telemetry.id}')), findsOneWidget);
+      await tester.tap(find.byKey(ValueKey('graph-tag-${communications.id}')));
+      await tester.pumpAndSettle();
+      expect(_editorField('Folder name'), findsOneWidget);
+      expect(
+        tester.widget<TextField>(_editorField('Tag')).controller!.text,
+        'COM',
+      );
+
+      await tester.enterText(_editorField('Folder name'), 'Communications bus');
+      await tester.enterText(_editorField('Tag'), 'bus');
+      await tester.enterText(
+        _editorField('Description'),
+        'Communication requirements.',
+      );
+      await tester.pump();
+      expect(
+        tester.widget<TextField>(_editorField('Tag')).controller!.text,
+        'BUS',
+      );
+      await tester.tap(find.byTooltip('Save folder'));
+      await _waitForText(tester, 'Project saved');
+
+      final saved = await tester.runAsync(repository.load);
+      expect(saved!.folder(communications.id).name, 'Communications bus');
+      expect(saved.folder(communications.id).tag, 'BUS');
+      expect(
+        saved.folder(communications.id).description,
+        'Communication requirements.',
+      );
+      expect(saved.displayIdForRequirement(nested.id), 'REQ-003-BUS-TEL');
+    },
+  );
+
+  testWidgets('explorer rows omit tags and keep long titles at normal size', (
+    tester,
+  ) async {
+    final project = _relationshipProject();
+    final folder = project.createFolder(1)
+      ..name = 'Communications'
+      ..tag = 'COM';
+    final short = project.createRequirement(folder.id)..title = 'Short';
+    final long = project.createRequirement(folder.id)
+      ..title = 'A very long requirement title that does not fit the explorer';
+    await _openProject(tester, project);
+
+    await tester.enterText(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField &&
+            widget.decoration?.hintText == 'Search: id:, version:, or text',
+      ),
+      'id:com',
+    );
+    await tester.pumpAndSettle();
+
+    final shortRow = find.byKey(ValueKey('requirement-drag-${short.id}'));
+    final longRow = find.byKey(ValueKey('requirement-drag-${long.id}'));
+    final shortLabel = find.descendant(
+      of: shortRow,
+      matching: find.text('REQ-003  Short'),
+    );
+    final longLabel = find.descendant(
+      of: longRow,
+      matching: find.text(
+        'REQ-004  A very long requirement title that does not fit the explorer',
+      ),
+    );
+    expect(shortLabel, findsOneWidget);
+    expect(longLabel, findsOneWidget);
+    expect(
+      find.descendant(of: longRow, matching: find.byType(FittedBox)),
+      findsNothing,
+    );
+    expect(tester.widget<Text>(longLabel).overflow, TextOverflow.ellipsis);
+    expect(
+      tester.widget<Text>(longLabel).style,
+      tester.widget<Text>(shortLabel).style,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('changes relationship type and supports revert and save', (
     tester,
   ) async {

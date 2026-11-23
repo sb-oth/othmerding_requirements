@@ -267,6 +267,7 @@ class RequirementsGraph extends StatefulWidget {
     required this.highlightedId,
     required this.onSelect,
     required this.onSelectComment,
+    this.onSelectFolder,
   });
 
   final RequirementProject project;
@@ -277,6 +278,7 @@ class RequirementsGraph extends StatefulWidget {
   final int? highlightedId;
   final ValueChanged<int> onSelect;
   final ValueChanged<int> onSelectComment;
+  final ValueChanged<int>? onSelectFolder;
 
   @override
   State<RequirementsGraph> createState() => _RequirementsGraphState();
@@ -383,10 +385,12 @@ class _RequirementsGraphState extends State<RequirementsGraph> {
                     Positioned.fromRect(
                       rect: rect,
                       child: _RequirementNode(
+                        project: widget.project,
                         requirement: widget.project.requirement(id),
                         selected: widget.selectedId == id,
                         highlighted: widget.highlightedId == id,
                         onTap: () => widget.onSelect(id),
+                        onSelectFolder: widget.onSelectFolder,
                       ),
                     ),
                 for (final id in commentIds)
@@ -482,16 +486,20 @@ class _CommentNode extends StatelessWidget {
 
 class _RequirementNode extends StatelessWidget {
   const _RequirementNode({
+    required this.project,
     required this.requirement,
     required this.selected,
     required this.highlighted,
     required this.onTap,
+    required this.onSelectFolder,
   });
 
+  final RequirementProject project;
   final Requirement requirement;
   final bool selected;
   final bool highlighted;
   final VoidCallback onTap;
+  final ValueChanged<int>? onSelectFolder;
 
   @override
   Widget build(BuildContext context) {
@@ -524,9 +532,40 @@ class _RequirementNode extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  requirement.displayId,
-                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.w400),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        requirement.displayId,
+                        style: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w400,
+                        ),
+                      ),
+                      for (final tag in project.tagsForRequirement(
+                        requirement.id,
+                      ))
+                        InkWell(
+                          key: ValueKey('graph-tag-${tag.folderId}'),
+                          onTap: onSelectFolder == null
+                              ? null
+                              : () => onSelectFolder!(tag.folderId),
+                          child: Text(
+                            '-${tag.value}',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Theme.of(context).colorScheme.primary,
+                              decoration: onSelectFolder == null
+                                  ? null
+                                  : TextDecoration.underline,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 3),
                 Text(
